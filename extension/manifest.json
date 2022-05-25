@@ -1,0 +1,12 @@
+{
+  "name": "Parakeet",
+  "description": "A sidekick to help write code in notebooks",
+  "version": "0.0.1",
+  "manifest_version": 3,
+  "content_scripts": [
+    {
+      "matches": ["https://*.colab.research.google.com/*"],
+      "js": ["main.tsx"]
+    }
+  ]
+}

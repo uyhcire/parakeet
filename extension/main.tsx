@@ -60,10 +60,10 @@ const useCursorPositionInfo = (): CursorPositionInfo | null => {
   const [cursorPositionInfo, setCursorPositionInfo] =
     React.useState<CursorPositionInfo | null>(getCurrentCursorPositionInfo());
 
-  // Stay up to date with DOM changes
+  // Stay up to date with DOM additions and deletions, as well as caret movements.
   const bodyRef = React.useRef(document.body);
   useMutationObserver(bodyRef, (mutations) => {
-    if (mutations.length > 0 && mutations[0].type === "childList") {
+    if (mutations.length > 0) {
       setCursorPositionInfo(getCurrentCursorPositionInfo());
     }
   });

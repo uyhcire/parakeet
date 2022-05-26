@@ -149,13 +149,14 @@ const Completion = (): JSX.Element | null => {
   // Extract all the cell text that comes before the user's cursor
   const cursorPositionInfo: CursorPositionInfo | null = useCursorPositionInfo();
   const [promptLength, setPromptLength] = React.useState<number | null>(null);
-  useIntervalWhen(() => {
+  const refreshPrompt = React.useCallback(() => {
     if (!cursorPositionInfo) {
       // No cell is active, so we can't show a completion.
       return;
     }
     setPromptLength(getCompletionPrompt(cursorPositionInfo)?.length ?? null);
-  }, 1000);
+  }, [cursorPositionInfo]);
+  useIntervalWhen(refreshPrompt, 1000);
 
   // Locate the notebook's main content, so that the displayed completion can be positioned relative to it.
   const bodyRef = React.useRef(document.body);

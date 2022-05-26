@@ -111,28 +111,6 @@ const extractColabCellTexts = (): Array<string> => {
   );
 };
 
-const getCompletionPrompt = (
-  cursorPositionInfo: CursorPositionInfo
-): string => {
-  if (NOTEBOOK_TYPE !== "colab") {
-    throw new Error("Only Colab is supported for now");
-  }
-
-  // Extract the text in each cell
-  let cellTexts = extractColabCellTexts();
-
-  // Ignore everything after the user's cursor
-  const { focusedCellIndex, selectionStart } = cursorPositionInfo;
-  cellTexts = cellTexts.filter((_, i) => i <= focusedCellIndex);
-  cellTexts[focusedCellIndex] = cellTexts[focusedCellIndex].slice(
-    0,
-    selectionStart
-  );
-
-  // Separate the text from different cells. The separator is arbitrary.
-  return cellTexts.join("\n\n########################################\n\n");
-};
-
 /**
  * Show a completion next to the cursor in the currently active cell.
  *
@@ -148,13 +126,19 @@ const Completion = (): JSX.Element | null => {
 
   // Extract all the cell text that comes before the user's cursor
   const cursorPositionInfo: CursorPositionInfo | null = useCursorPositionInfo();
-  const [promptLength, setPromptLength] = React.useState<number | null>(null);
+  const [cellTexts, setCellTexts] = React.useState<Array<string> | null>(null);
   const refreshPrompt = React.useCallback(() => {
     if (!cursorPositionInfo) {
       // No cell is active, so we can't show a completion.
       return;
     }
-    setPromptLength(getCompletionPrompt(cursorPositionInfo)?.length ?? null);
+
+    if (NOTEBOOK_TYPE !== "colab") {
+      throw new Error("Only Colab is supported for now");
+    }
+
+    // Extract the text in each cell
+    setCellTexts(extractColabCellTexts());
   }, [cursorPositionInfo]);
   useIntervalWhen(refreshPrompt, 1000);
 
@@ -174,11 +158,20 @@ const Completion = (): JSX.Element | null => {
     }
   });
 
-  if (!cursorPositionInfo) {
-    // No cell is active, so we can't show a completion.
+  if (!cursorPositionInfo || !cellTexts) {
+    // We can't show a completion.
     return null;
   }
   const { focusedCellIndex } = cursorPositionInfo;
+  const cellTextAfterCursor = cellTexts[focusedCellIndex].slice(
+    cursorPositionInfo.selectionStart
+  );
+  const isCursorAtEndOfLine =
+    cellTextAfterCursor.length === 0 || cellTextAfterCursor[0] === "\n";
+  if (!isCursorAtEndOfLine) {
+    // It's tricky to show a completion if the cursor is not at the end of a line.
+    return null;
+  }
 
   const cursorRect = [
     // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
@@ -205,7 +198,7 @@ const Completion = (): JSX.Element | null => {
             zIndex: 1,
           }}
         >
-          {promptLength} character(s) in prompt
+          foo bar baz
         </span>,
         notebookScrollContainerRef.current
       );

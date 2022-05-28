@@ -243,7 +243,7 @@ const Completion = (): JSX.Element | null => {
     // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
     ...document.querySelectorAll("div.cell"),
   ][caretPositionInfo.focusedCellIndex]
-    .querySelector(".caret.monaco-mouse-caret-text")!
+    .querySelector(".cursor.monaco-mouse-cursor-text")!
     .getBoundingClientRect();
   const caretX = caretRect.x;
   const caretY = caretRect.y;

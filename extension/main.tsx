@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { useIntervalWhen, useMutationObserver } from "rooks";
+import { useDebounce, useIntervalWhen, useMutationObserver } from "rooks";
 
 // TODO: add Jupyter support
 const NOTEBOOK_TYPE = "colab";
@@ -72,43 +72,98 @@ const useCursorPositionInfo = (): CursorPositionInfo | null => {
 };
 
 /**
- * Parse Colab's DOM structure to extract the text of each cell.
+ * Provides the text value of each Colab cell. The text values are extracted by parsing Colab's DOM structure.
  *
  * The main complication is that Colab "virtualizes" its cells.
  * Off-screen cells are rendered differently, and we must account for that.
  */
-const extractColabCellTexts = (): Array<string> => {
-  return [...document.querySelectorAll("div.lazy-editor")].map(
-    (cellEditor): string => {
-      let visible = Boolean(cellEditor.querySelector(".monaco"));
-      if (visible) {
-        return [...cellEditor.querySelectorAll(".view-line")]
-          .map(({ textContent }) => textContent)
-          .join("\n");
-      } else {
-        const contentNode = cellEditor.querySelector(
-          "pre.lazy-virtualized > pre.monaco-colorized"
-        );
-        if (!contentNode) {
-          throw new Error(
-            'Expected each off-screen non-rendered cell to have a <pre class="lazy-virtualized..."> element'
-          );
-        }
+const useColabCellTexts = (): Array<string> | null => {
+  if (NOTEBOOK_TYPE !== "colab") {
+    throw new Error("Only Colab is supported for now");
+  }
 
-        let cellValue = "";
-        for (const subNode of contentNode.children) {
-          if (subNode.tagName === "SPAN") {
-            cellValue += subNode.textContent;
-          } else if (subNode.tagName === "BR") {
-            cellValue += "\n";
-          } else {
-            throw new Error(`Unexpected tag type '${subNode.tagName}'`);
-          }
-        }
-        return cellValue;
-      }
+  const [cellTexts, setCellTexts] = React.useState<Array<string> | null>(null);
+
+  // Stay up to date with DOM additions and deletions, as well as caret movements.
+  const bodyRef = React.useRef(document.body);
+  useMutationObserver(bodyRef, (mutations) => {
+    if (mutations.length > 0) {
+      setCellTexts(
+        (() =>
+          [...document.querySelectorAll("div.lazy-editor")].map(
+            (cellEditor): string => {
+              let visible = Boolean(cellEditor.querySelector(".monaco"));
+              if (visible) {
+                return [...cellEditor.querySelectorAll(".view-line")]
+                  .map(({ textContent }) => textContent)
+                  .join("\n");
+              } else {
+                const contentNode = cellEditor.querySelector(
+                  "pre.lazy-virtualized > pre.monaco-colorized"
+                );
+                if (!contentNode) {
+                  throw new Error(
+                    'Expected each off-screen non-rendered cell to have a <pre class="lazy-virtualized..."> element'
+                  );
+                }
+
+                let cellValue = "";
+                for (const subNode of contentNode.children) {
+                  if (subNode.tagName === "SPAN") {
+                    cellValue += subNode.textContent;
+                  } else if (subNode.tagName === "BR") {
+                    cellValue += "\n";
+                  } else {
+                    throw new Error(`Unexpected tag type '${subNode.tagName}'`);
+                  }
+                }
+                return cellValue;
+              }
+            }
+          ))()
+      );
     }
+  });
+
+  return cellTexts;
+};
+
+const useDebouncedLMCompletion = (prompt: string | null) => {
+  const [completion, setCompletion] = React.useState<string | null>(null);
+
+  const doRequestCompletion = React.useCallback(
+    async (prompt_: string) => {
+      const completionResponse = await fetch(
+        "https://api.goose.ai/v1/engines/gpt-j-6b/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.API_KEY}`,
+          },
+          body: JSON.stringify({
+            prompt: prompt_,
+            max_tokens: 80,
+            temperature: 0.0,
+            stop: ["\n"],
+          }),
+        }
+      );
+      setCompletion(
+        (await completionResponse.json()).choices[0].text.split("\n")[0]
+      );
+    },
+    [setCompletion]
   );
+  const doRequestCompletionDebounced = useDebounce(doRequestCompletion, 1000);
+  React.useEffect(() => {
+    setCompletion(null);
+    if (prompt != null) {
+      doRequestCompletionDebounced(prompt);
+    }
+  }, [doRequestCompletionDebounced, prompt]);
+
+  return completion;
 };
 
 /**
@@ -124,23 +179,9 @@ const Completion = (): JSX.Element | null => {
     throw new Error("Only Colab is supported for now");
   }
 
-  // Extract all the cell text that comes before the user's cursor
+  // Extract the text of each cell and the position of the user's cursor
+  const cellTexts = useColabCellTexts();
   const cursorPositionInfo: CursorPositionInfo | null = useCursorPositionInfo();
-  const [cellTexts, setCellTexts] = React.useState<Array<string> | null>(null);
-  const refreshPrompt = React.useCallback(() => {
-    if (!cursorPositionInfo) {
-      // No cell is active, so we can't show a completion.
-      return;
-    }
-
-    if (NOTEBOOK_TYPE !== "colab") {
-      throw new Error("Only Colab is supported for now");
-    }
-
-    // Extract the text in each cell
-    setCellTexts(extractColabCellTexts());
-  }, [cursorPositionInfo]);
-  useIntervalWhen(refreshPrompt, 1000);
 
   // Locate the notebook's main content, so that the displayed completion can be positioned relative to it.
   const bodyRef = React.useRef(document.body);
@@ -158,25 +199,50 @@ const Completion = (): JSX.Element | null => {
     }
   });
 
-  if (!cursorPositionInfo || !cellTexts) {
-    // We can't show a completion.
-    return null;
-  }
-  const { focusedCellIndex } = cursorPositionInfo;
-  const cellTextAfterCursor = cellTexts[focusedCellIndex].slice(
-    cursorPositionInfo.selectionStart
+  const completion = useDebouncedLMCompletion(
+    // Prompt:
+    ((): string | null => {
+      // Don't request a completion if we don't know what's before the cursor
+      if (cursorPositionInfo == null || cellTexts == null) {
+        return null;
+      }
+
+      // Don't request a completion if the cursor is in the middle of a line
+      const cellTextAfterCursor = cellTexts[
+        cursorPositionInfo.focusedCellIndex
+      ].slice(cursorPositionInfo.selectionStart);
+      const isCursorAtEndOfLine =
+        cellTextAfterCursor.length === 0 || cellTextAfterCursor[0] === "\n";
+      if (!isCursorAtEndOfLine) {
+        return null;
+      }
+
+      const { focusedCellIndex } = cursorPositionInfo;
+
+      let prompt = "";
+      cellTexts?.forEach((cellText, i) => {
+        if (i < focusedCellIndex) {
+          prompt += cellText;
+        } else if (i === focusedCellIndex) {
+          prompt += cellText.slice(0, cursorPositionInfo.selectionStart);
+        } else {
+          // i > focusedCellIndex
+          return;
+        }
+      });
+
+      return prompt;
+    })()
   );
-  const isCursorAtEndOfLine =
-    cellTextAfterCursor.length === 0 || cellTextAfterCursor[0] === "\n";
-  if (!isCursorAtEndOfLine) {
-    // It's tricky to show a completion if the cursor is not at the end of a line.
+
+  if (cursorPositionInfo == null || completion == null || completion == "") {
     return null;
   }
 
   const cursorRect = [
     // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
     ...document.querySelectorAll("div.cell"),
-  ][focusedCellIndex]
+  ][cursorPositionInfo.focusedCellIndex]
     .querySelector(".cursor.monaco-mouse-cursor-text")!
     .getBoundingClientRect();
   const cursorX = cursorRect.x;
@@ -185,23 +251,26 @@ const Completion = (): JSX.Element | null => {
     .querySelector("div.notebook-content")!
     .getBoundingClientRect();
 
-  return !notebookScrollContainerRef.current
-    ? null // there is nowhere to put the completion yet
-    : createPortal(
-        <span
-          style={{
-            position: "absolute",
-            // The completion is positioned relative to the notebook content's scroll container, rather than the whole viewport.
-            // This way, the completion will move naturally with the page content as you scroll.
-            left: `${cursorX - notebookScrollContainerRect.x}px`,
-            top: `${cursorY - notebookScrollContainerRect.y}px`,
-            zIndex: 1,
-          }}
-        >
-          foo bar baz
-        </span>,
-        notebookScrollContainerRef.current
-      );
+  if (notebookScrollContainerRef.current == null) {
+    // There is nowhere to put the completion yet
+    return null;
+  }
+
+  return createPortal(
+    <span
+      style={{
+        position: "absolute",
+        // The completion is positioned relative to the notebook content's scroll container, rather than the whole viewport.
+        // This way, the completion will move naturally with the page content as you scroll.
+        left: `${cursorX - notebookScrollContainerRect.x}px`,
+        top: `${cursorY - notebookScrollContainerRect.y}px`,
+        zIndex: 1,
+      }}
+    >
+      {completion}
+    </span>,
+    notebookScrollContainerRef.current
+  );
 };
 
 const rootNode = document.createElement("div");

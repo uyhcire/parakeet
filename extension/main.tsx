@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { useDebounce, useIntervalWhen, useMutationObserver } from "rooks";
+import { useDebounce, useMutationObserver } from "rooks";
 
 // TODO: add Jupyter support
 const NOTEBOOK_TYPE = "colab";

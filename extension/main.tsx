@@ -9,21 +9,21 @@ const NOTEBOOK_TYPE = "colab";
 /**
  * A simplified representation of "where the user is" in their notebook.
  */
-interface CursorPositionInfo {
+interface CaretPositionInfo {
   focusedCellIndex: number;
   selectionStart: number;
 }
 
 /**
- * Provides the user's most up-to-date cursor position.
+ * Provides the user's most up-to-date caret position.
  */
-const useCursorPositionInfo = (): CursorPositionInfo | null => {
+const useCaretPositionInfo = (): CaretPositionInfo | null => {
   if (NOTEBOOK_TYPE !== "colab") {
     throw new Error("Only Colab is supported for now");
   }
 
   // Hook into the currently-focused cell's index and the `selectionStart`
-  const getCurrentCursorPositionInfo = (): CursorPositionInfo | null => {
+  const getCurrentCaretPositionInfo = (): CaretPositionInfo | null => {
     // `focusedCellIndex`
     let cellFocusStates = [
       ...document.querySelectorAll("colab-run-button"),
@@ -51,24 +51,24 @@ const useCursorPositionInfo = (): CursorPositionInfo | null => {
     const selectionStart = inputAreas[focusedCellIndex]?.selectionStart;
     const selectionEnd = inputAreas[focusedCellIndex]?.selectionEnd;
     if (selectionStart == null || selectionEnd !== selectionStart) {
-      // Don't show a completion if there is no cursor, or if the user is trying to select something.
+      // Don't show a completion if there is no caret, or if the user is trying to select something.
       return null;
     }
 
     return { focusedCellIndex, selectionStart };
   };
-  const [cursorPositionInfo, setCursorPositionInfo] =
-    React.useState<CursorPositionInfo | null>(getCurrentCursorPositionInfo());
+  const [caretPositionInfo, setCaretPositionInfo] =
+    React.useState<CaretPositionInfo | null>(getCurrentCaretPositionInfo());
 
   // Stay up to date with DOM additions and deletions, as well as caret movements.
   const bodyRef = React.useRef(document.body);
   useMutationObserver(bodyRef, (mutations) => {
     if (mutations.length > 0) {
-      setCursorPositionInfo(getCurrentCursorPositionInfo());
+      setCaretPositionInfo(getCurrentCaretPositionInfo());
     }
   });
 
-  return cursorPositionInfo;
+  return caretPositionInfo;
 };
 
 /**
@@ -167,7 +167,7 @@ const useDebouncedLMCompletion = (prompt: string | null) => {
 };
 
 /**
- * Show a completion next to the cursor in the currently active cell.
+ * Show a completion next to the caret in the currently active cell.
  *
  * The completion is added to the DOM as a direct child of the <body>.
  * It could instead be inserted right into the DOM of the cell, but this is very tricky to do for Monaco,
@@ -179,9 +179,9 @@ const Completion = (): JSX.Element | null => {
     throw new Error("Only Colab is supported for now");
   }
 
-  // Extract the text of each cell and the position of the user's cursor
+  // Extract the text of each cell and the position of the user's caret
   const cellTexts = useColabCellTexts();
-  const cursorPositionInfo: CursorPositionInfo | null = useCursorPositionInfo();
+  const caretPositionInfo: CaretPositionInfo | null = useCaretPositionInfo();
 
   // Locate the notebook's main content, so that the displayed completion can be positioned relative to it.
   const bodyRef = React.useRef(document.body);
@@ -202,29 +202,29 @@ const Completion = (): JSX.Element | null => {
   const completion = useDebouncedLMCompletion(
     // Prompt:
     ((): string | null => {
-      // Don't request a completion if we don't know what's before the cursor
-      if (cursorPositionInfo == null || cellTexts == null) {
+      // Don't request a completion if we don't know what's before the caret
+      if (caretPositionInfo == null || cellTexts == null) {
         return null;
       }
 
-      // Don't request a completion if the cursor is in the middle of a line
-      const cellTextAfterCursor = cellTexts[
-        cursorPositionInfo.focusedCellIndex
-      ].slice(cursorPositionInfo.selectionStart);
-      const isCursorAtEndOfLine =
-        cellTextAfterCursor.length === 0 || cellTextAfterCursor[0] === "\n";
-      if (!isCursorAtEndOfLine) {
+      // Don't request a completion if the caret is in the middle of a line
+      const cellTextAfterCaret = cellTexts[
+        caretPositionInfo.focusedCellIndex
+      ].slice(caretPositionInfo.selectionStart);
+      const isCaretAtEndOfLine =
+        cellTextAfterCaret.length === 0 || cellTextAfterCaret[0] === "\n";
+      if (!isCaretAtEndOfLine) {
         return null;
       }
 
-      const { focusedCellIndex } = cursorPositionInfo;
+      const { focusedCellIndex } = caretPositionInfo;
 
       let prompt = "";
       cellTexts?.forEach((cellText, i) => {
         if (i < focusedCellIndex) {
           prompt += cellText;
         } else if (i === focusedCellIndex) {
-          prompt += cellText.slice(0, cursorPositionInfo.selectionStart);
+          prompt += cellText.slice(0, caretPositionInfo.selectionStart);
         } else {
           // i > focusedCellIndex
           return;
@@ -235,18 +235,18 @@ const Completion = (): JSX.Element | null => {
     })()
   );
 
-  if (cursorPositionInfo == null || completion == null || completion == "") {
+  if (caretPositionInfo == null || completion == null || completion == "") {
     return null;
   }
 
-  const cursorRect = [
+  const caretRect = [
     // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
     ...document.querySelectorAll("div.cell"),
-  ][cursorPositionInfo.focusedCellIndex]
-    .querySelector(".cursor.monaco-mouse-cursor-text")!
+  ][caretPositionInfo.focusedCellIndex]
+    .querySelector(".caret.monaco-mouse-caret-text")!
     .getBoundingClientRect();
-  const cursorX = cursorRect.x;
-  const cursorY = cursorRect.y;
+  const caretX = caretRect.x;
+  const caretY = caretRect.y;
   const notebookScrollContainerRect = document
     .querySelector("div.notebook-content")!
     .getBoundingClientRect();
@@ -262,8 +262,8 @@ const Completion = (): JSX.Element | null => {
         position: "absolute",
         // The completion is positioned relative to the notebook content's scroll container, rather than the whole viewport.
         // This way, the completion will move naturally with the page content as you scroll.
-        left: `${cursorX - notebookScrollContainerRect.x}px`,
-        top: `${cursorY - notebookScrollContainerRect.y}px`,
+        left: `${caretX - notebookScrollContainerRect.x}px`,
+        top: `${caretY - notebookScrollContainerRect.y}px`,
         zIndex: 1,
       }}
     >

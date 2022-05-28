@@ -6,7 +6,7 @@
   "license": "MIT",
   "scripts": {
     "typecheck": "tsc -p . --noEmit",
-    "build-fast": "rm -rf dist/ && parcel build manifest.json --config @parcel/config-webextension",
+    "build-fast": "rm -rf dist/ && parcel build manifest.json --config @parcel/config-webextension --no-optimize",
     "build": "yarn run typecheck && yarn run build-fast"
   },
   "devDependencies": {

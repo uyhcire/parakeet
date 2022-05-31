@@ -166,6 +166,104 @@ const useDebouncedLMCompletion = (prompt: string | null) => {
   return completion;
 };
 
+/**
+ * Show a completion next to the caret in the currently active cell.
+ *
+ * The completion is absolutely positioned, outside of the cell's DOM tree.
+ * It could instead be inserted right into the DOM of the cell, but this is very tricky to do for Monaco,
+ * because Monaco errors and stops displaying anything if you mutate the parts of the DOM that it is managing.
+ *
+ * The completion must be positioned and styled carefully, so that it can blend in well with the cell's existing code.
+ */
+const Completion = ({
+  focusedCellIndex,
+  lineNumberInCell,
+
+  text,
+}: {
+  focusedCellIndex: number;
+  lineNumberInCell: number;
+
+  text: string;
+}) => {
+  if (NOTEBOOK_TYPE !== "colab") {
+    throw new Error("Only Colab is supported for now");
+  }
+
+  const lineNode = document
+    .querySelectorAll("div.cell") // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
+    [focusedCellIndex].querySelectorAll("div.view-line")[lineNumberInCell];
+  const lineComputedStyle = getComputedStyle(lineNode);
+
+  if (
+    lineNode.children.length !== 1 ||
+    lineNode.children[0].tagName !== "SPAN"
+  ) {
+    throw new Error("Expected every Monaco line to have one top-level span");
+  }
+  // This could theoretically get out of date, but over a day or so of testing I haven't seen that happen at all.
+  const lineSpanRect = lineNode.children[0].getBoundingClientRect();
+
+  // Locate the notebook's main content, so that the displayed completion can be positioned relative to it.
+  const bodyRef = React.useRef(document.body);
+  const notebookScrollContainerRef = React.useRef(
+    document.querySelector("div.notebook-content")
+  );
+  useMutationObserver(bodyRef, (mutations) => {
+    if (notebookScrollContainerRef.current) {
+      return; // we already know where the scroll container is
+    }
+    if (mutations.length > 0 && mutations[0].type === "childList") {
+      notebookScrollContainerRef.current = document.querySelector(
+        "div.notebook-content"
+      );
+    }
+  });
+  if (notebookScrollContainerRef.current == null) {
+    // There is nowhere to put the completion yet
+    return null;
+  }
+  const notebookScrollContainerRect =
+    notebookScrollContainerRef.current.getBoundingClientRect();
+
+  return createPortal(
+    <div
+      style={{
+        /* Appearance */
+
+        color: "gray", // looks pretty good in Colab, but may need to be different for Jupyter
+
+        fontFamily: lineComputedStyle.fontFamily,
+        fontFeatureSettings: lineComputedStyle.fontFeatureSettings,
+        fontSize: lineComputedStyle.fontSize,
+        height: lineComputedStyle.height,
+        letterSpacing: lineComputedStyle.letterSpacing,
+        lineHeight: lineComputedStyle.lineHeight,
+
+        /* Positioning */
+
+        position: "absolute",
+        // The completion is positioned relative to the notebook content's scroll container, rather than the whole viewport.
+        // This way, the completion will move naturally with the page content as you scroll.
+        // The last term is needed to adjust for the container's margin.
+        left: `calc(${lineSpanRect.right}px - ${
+          notebookScrollContainerRect.left
+        }px + ${
+          getComputedStyle(notebookScrollContainerRef.current).marginLeft
+        }`,
+        // The last term is needed because for some reason, this `top` specifies the top of the text, not the top of the div.
+        top: `calc(${lineSpanRect.top}px
+          - ${notebookScrollContainerRect.top}px
+          + ${lineComputedStyle.height} - ${lineComputedStyle.fontSize})`,
+        zIndex: 1,
+      }}
+    >
+      {text}
+    </div>,
+    notebookScrollContainerRef.current
+  );
+};
+
 const Inserter = ({
   focusedCellIndex,
   completion,
@@ -217,13 +315,11 @@ const Inserter = ({
 };
 
 /**
- * Show a completion next to the caret in the currently active cell.
+ * Top-level controller for Parakeet.
  *
- * The completion is added to the DOM as a direct child of the <body>.
- * It could instead be inserted right into the DOM of the cell, but this is very tricky to do for Monaco,
- * because Monaco errors and stops displaying anything if you mutate the parts of the DOM that it is managing.
+ * Displays a completion when appropriate, and inserts the completion into the cell if the user confirms.
  */
-const Completion = (): JSX.Element | null => {
+const Parakeet = (): JSX.Element | null => {
   // The selectors we're using are all Colab-specific. To support Jupyter, we'll need to rewrite much of this component's code.
   if (NOTEBOOK_TYPE !== "colab") {
     throw new Error("Only Colab is supported for now");
@@ -233,23 +329,7 @@ const Completion = (): JSX.Element | null => {
   const cellTexts = useColabCellTexts();
   const caretPositionInfo: CaretPositionInfo | null = useCaretPositionInfo();
 
-  // Locate the notebook's main content, so that the displayed completion can be positioned relative to it.
-  const bodyRef = React.useRef(document.body);
-  const notebookScrollContainerRef = React.useRef(
-    document.querySelector("div.notebook-content")
-  );
-  useMutationObserver(bodyRef, (mutations) => {
-    if (notebookScrollContainerRef.current) {
-      return; // we already know where the scroll container is
-    }
-    if (mutations.length > 0 && mutations[0].type === "childList") {
-      notebookScrollContainerRef.current = document.querySelector(
-        "div.notebook-content"
-      );
-    }
-  });
-
-  const completion = useDebouncedLMCompletion(
+  const completionText = useDebouncedLMCompletion(
     // Prompt:
     ((): string | null => {
       // Don't request a completion if we don't know what's before the caret
@@ -285,45 +365,35 @@ const Completion = (): JSX.Element | null => {
     })()
   );
 
-  if (caretPositionInfo == null || completion == null || completion == "") {
+  if (
+    // Bail if there is no completion to show
+    completionText == null ||
+    completionText == "" ||
+    // Bail if there is not enough information to position the completion
+    caretPositionInfo == null ||
+    cellTexts == null
+  ) {
     return null;
   }
 
-  const caretRect = [
-    // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
-    ...document.querySelectorAll("div.cell"),
-  ][caretPositionInfo.focusedCellIndex]
-    .querySelector(".cursor.monaco-mouse-cursor-text")!
-    .getBoundingClientRect();
-  const caretX = caretRect.x;
-  const caretY = caretRect.y;
-  const notebookScrollContainerRect = document
-    .querySelector("div.notebook-content")!
-    .getBoundingClientRect();
+  const cellTextBeforeCaret = cellTexts[
+    caretPositionInfo.focusedCellIndex
+  ].slice(0, caretPositionInfo.selectionStart);
+  // https://stackoverflow.com/a/43820645
+  const lineNumberInCell = cellTextBeforeCaret.match(/\n/g)?.length ?? 0;
 
-  if (notebookScrollContainerRef.current == null) {
-    // There is nowhere to put the completion yet
-    return null;
-  }
-
-  return createPortal(
-    <span
-      style={{
-        position: "absolute",
-        // The completion is positioned relative to the notebook content's scroll container, rather than the whole viewport.
-        // This way, the completion will move naturally with the page content as you scroll.
-        left: `${caretX - notebookScrollContainerRect.x}px`,
-        top: `${caretY - notebookScrollContainerRect.y}px`,
-        zIndex: 1,
-      }}
-    >
-      {completion}
+  return (
+    <>
+      <Completion
+        focusedCellIndex={caretPositionInfo.focusedCellIndex}
+        lineNumberInCell={lineNumberInCell}
+        text={completionText}
+      />
       <Inserter
         focusedCellIndex={caretPositionInfo.focusedCellIndex}
-        completion={completion}
+        completion={completionText}
       />
-    </span>,
-    notebookScrollContainerRef.current
+    </>
   );
 };
 
@@ -331,4 +401,4 @@ const rootNode = document.createElement("div");
 rootNode.setAttribute("id", "parakeet-root");
 document.body.appendChild(rootNode);
 const root = createRoot(document.getElementById("parakeet-root")!);
-root.render(<Completion />);
+root.render(<Parakeet />);

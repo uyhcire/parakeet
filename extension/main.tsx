@@ -329,7 +329,7 @@ const Parakeet = (): JSX.Element | null => {
   const cellTexts = useColabCellTexts();
   const caretPositionInfo: CaretPositionInfo | null = useCaretPositionInfo();
 
-  const completionText = useDebouncedLMCompletion(
+  let completionText = useDebouncedLMCompletion(
     // Prompt:
     ((): string | null => {
       // Don't request a completion if we don't know what's before the caret
@@ -364,6 +364,12 @@ const Parakeet = (): JSX.Element | null => {
       return prompt;
     })()
   );
+  if (completionText != null) {
+    // For some reason, GPT-J sometimes likes to use non-breaking spaces instead of regular spaces.
+    // We need to replace those spaces, or else the user will run into syntax errors.
+    // Snippet is from https://stackoverflow.com/a/1496863
+    completionText = completionText.replace(/\u00a0/g, " ");
+  }
 
   if (
     // Bail if there is no completion to show

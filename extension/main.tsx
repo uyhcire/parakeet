@@ -1,7 +1,7 @@
-import React from "react";
+import React, { KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { useDebounce, useMutationObserver } from "rooks";
+import { useDebounce, useEventListenerRef, useMutationObserver } from "rooks";
 
 // TODO: add Jupyter support
 const NOTEBOOK_TYPE = "colab";
@@ -166,6 +166,56 @@ const useDebouncedLMCompletion = (prompt: string | null) => {
   return completion;
 };
 
+const Inserter = ({
+  focusedCellIndex,
+  completion,
+}: {
+  focusedCellIndex: number;
+  completion: string;
+}) => {
+  if (NOTEBOOK_TYPE !== "colab") {
+    throw new Error("Only Colab is supported for now");
+  }
+
+  const ref = useEventListenerRef("keydown", function (e: KeyboardEvent) {
+    if (
+      e.key === "Tab" &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      !e.metaKey &&
+      !e.shiftKey
+    ) {
+      // Although `execCommand` is deprecated, it is the best option we have, and it is unlikely to go away any time soon.
+      // See: https://stackoverflow.com/questions/60581285/execcommand-is-now-obsolete-whats-the-alternative
+      document.execCommand(
+        "insertText",
+        false /* doesn't matter */,
+        completion
+      );
+      e.preventDefault(); // keep the cell focused
+      e.stopPropagation(); // don't actually type a Tab in the cell
+    }
+  });
+  const updateCaretRef = React.useCallback(() => {
+    const inputAreas: Array<HTMLTextAreaElement | null> = [
+      ...document.querySelectorAll("div.cell"),
+    ].map((cell) => cell.querySelector("textarea.inputarea"));
+    ref(inputAreas[focusedCellIndex]);
+  }, [focusedCellIndex, ref]);
+  // Stay up to date with DOM additions and deletions, as well as caret movements.
+  const bodyRef = React.useRef(document.body);
+  useMutationObserver(bodyRef, (mutations) => {
+    if (mutations.length > 0) {
+      updateCaretRef();
+    }
+  });
+  React.useEffect(() => {
+    updateCaretRef();
+  }, [focusedCellIndex, updateCaretRef]);
+
+  return null;
+};
+
 /**
  * Show a completion next to the caret in the currently active cell.
  *
@@ -268,6 +318,10 @@ const Completion = (): JSX.Element | null => {
       }}
     >
       {completion}
+      <Inserter
+        focusedCellIndex={caretPositionInfo.focusedCellIndex}
+        completion={completion}
+      />
     </span>,
     notebookScrollContainerRef.current
   );

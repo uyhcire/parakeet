@@ -239,6 +239,7 @@ const Completion = ({
         height: lineComputedStyle.height,
         letterSpacing: lineComputedStyle.letterSpacing,
         lineHeight: lineComputedStyle.lineHeight,
+        whiteSpace: "pre",
 
         /* Positioning */
 

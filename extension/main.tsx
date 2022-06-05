@@ -143,11 +143,33 @@ const useDebouncedLMCompletion = (prompt: string | null) => {
   const [completion, setCompletion] = React.useState<string | null>(null);
 
   const [apiKey, setApiKey] = React.useState<string | null>(null);
+  // Initial value
   React.useEffect(() => {
     chrome.storage.sync.get("PARAKEET_API_KEY", (items) => {
-      setApiKey(items["PARAKEET_API_KEY"] ?? "");
+      setApiKey(items["PARAKEET_API_KEY"] ?? null);
     });
   }, []);
+  // If the API key is updated while this content script is running,
+  // the new API key should be usable without refreshing the page.
+  type StorageChangeCallback = Parameters<
+    typeof chrome.storage.onChanged.addListener
+  >[0];
+  const onStorageChanged = React.useCallback<StorageChangeCallback>(
+    (changes) => {
+      const newApiKey: string | null =
+        changes["PARAKEET_API_KEY"]?.newValue ?? null;
+      if (newApiKey != null && apiKey == null) {
+        setApiKey(newApiKey);
+      }
+    },
+    [apiKey, setApiKey]
+  );
+  React.useEffect(() => {
+    chrome.storage.onChanged.addListener(onStorageChanged);
+    return () => {
+      chrome.storage.onChanged.removeListener(onStorageChanged);
+    };
+  }, [onStorageChanged]);
 
   const engine = new Engine();
 

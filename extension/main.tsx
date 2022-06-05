@@ -199,6 +199,12 @@ const useDebouncedLMCompletion = (
         return;
       }
 
+      // At least with GPT-J, an empty prompt results in a tokenization error.
+      // So if the prompt is empty, we shouldn't try to request a completion.
+      if (prompt_ === "") {
+        return;
+      }
+
       const newCompletion = await engine.requestLineCompletion(apiKey, prompt_);
       setCompletion(newCompletion);
     },

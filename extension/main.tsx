@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { useDebounce, useEventListenerRef, useMutationObserver } from "rooks";
 
+import Engine from "./engine";
+
 // TODO: add Jupyter support
 const NOTEBOOK_TYPE = "colab";
 
@@ -140,29 +142,25 @@ const useColabCellTexts = (): Array<string> | null => {
 const useDebouncedLMCompletion = (prompt: string | null) => {
   const [completion, setCompletion] = React.useState<string | null>(null);
 
+  const [apiKey, setApiKey] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    chrome.storage.sync.get("PARAKEET_API_KEY", (items) => {
+      setApiKey(items["PARAKEET_API_KEY"] ?? "");
+    });
+  }, []);
+
+  const engine = new Engine();
+
   const doRequestCompletion = React.useCallback(
     async (prompt_: string) => {
-      const completionResponse = await fetch(
-        "https://api.goose.ai/v1/engines/gpt-j-6b/completions",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${process.env.API_KEY}`,
-          },
-          body: JSON.stringify({
-            prompt: prompt_,
-            max_tokens: 80,
-            temperature: 0.0,
-            stop: ["\n"],
-          }),
-        }
-      );
-      setCompletion(
-        (await completionResponse.json()).choices[0].text.split("\n")[0]
-      );
+      if (apiKey == null) {
+        return;
+      }
+
+      const newCompletion = await engine.requestLineCompletion(apiKey, prompt_);
+      setCompletion(newCompletion);
     },
-    [setCompletion]
+    [setCompletion, apiKey]
   );
   const doRequestCompletionDebounced = useDebounce(doRequestCompletion, 1000);
   React.useEffect(() => {

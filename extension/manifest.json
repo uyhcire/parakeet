@@ -8,5 +8,14 @@
       "matches": ["https://*.colab.research.google.com/*"],
       "js": ["main.tsx"]
     }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "128": "icon.png"
+  },
+  "permissions": [
+    "storage"
   ]
 }

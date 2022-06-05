@@ -1,0 +1,12 @@
+/* The file tries to counter the effects of the special CSS that Chrome injects into extension popups, which can make popups look quite weird. */
+/* https://stackoverflow.com/a/36778864 */
+/* https://github.com/yewsiang/tailwind-react-chrome-extension-template/blob/master/src/pages/Popup/index.css */
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen",
+    "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  font-size: initial;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

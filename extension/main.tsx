@@ -1,12 +1,28 @@
-import React, { KeyboardEvent } from "react";
+import React, { KeyboardEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { useDebounce, useEventListenerRef, useMutationObserver } from "rooks";
+import { Alert, Snackbar } from "@mui/material";
+// @ts-ignore
+import useOnlineStatus from "@rehooks/online-status";
 
 import Engine from "./engine";
 
 // TODO: add Jupyter support
 const NOTEBOOK_TYPE = "colab";
+
+/**
+ * Reduce network errors by only mounting the given component when the browser can connect to the Internet.
+ */
+const OnlyIfOnline = ({
+  children,
+}: {
+  children: JSX.Element;
+}): JSX.Element | null => {
+  const isOnline = useOnlineStatus();
+
+  return isOnline ? children : null;
+};
 
 /**
  * A simplified representation of "where the user is" in their notebook.
@@ -139,8 +155,12 @@ const useColabCellTexts = (): Array<string> | null => {
   return cellTexts;
 };
 
-const useDebouncedLMCompletion = (prompt: string | null) => {
-  const [completion, setCompletion] = React.useState<string | null>(null);
+const useDebouncedLMCompletion = (
+  prompt: string | null
+): string | null | { error: "SERVER_ERROR" } => {
+  const [completion, setCompletion] = React.useState<
+    string | null | { error: "SERVER_ERROR" }
+  >(null);
 
   const [apiKey, setApiKey] = React.useState<string | null>(null);
   // Initial value
@@ -359,7 +379,7 @@ const Parakeet = (): JSX.Element | null => {
   const cellTexts = useColabCellTexts();
   const caretPositionInfo: CaretPositionInfo | null = useCaretPositionInfo();
 
-  let completionText = useDebouncedLMCompletion(
+  const maybeCompletionText = useDebouncedLMCompletion(
     // Prompt:
     ((): string | null => {
       // Don't request a completion if we don't know what's before the caret
@@ -394,23 +414,41 @@ const Parakeet = (): JSX.Element | null => {
       return prompt;
     })()
   );
-  if (completionText != null) {
-    // For some reason, GPT-J sometimes likes to use non-breaking spaces instead of regular spaces.
-    // We need to replace those spaces, or else the user will run into syntax errors.
-    // Snippet is from https://stackoverflow.com/a/1496863
-    completionText = completionText.replace(/\u00a0/g, " ");
+  if (
+    typeof maybeCompletionText === "object" &&
+    maybeCompletionText?.error === "SERVER_ERROR"
+  ) {
+    // The user may no longer have access to their language model provider.
+    // For example, they may have exceeded their quota for the billing period.
+    return (
+      <Snackbar
+        open={true}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error">
+          Parakeet error: our request was rejected by the language model
+          provider! You may want to check if you still have access.
+        </Alert>
+      </Snackbar>
+    );
   }
 
   if (
     // Bail if there is no completion to show
-    completionText == null ||
-    completionText == "" ||
+    maybeCompletionText == null ||
+    maybeCompletionText == "" ||
     // Bail if there is not enough information to position the completion
     caretPositionInfo == null ||
     cellTexts == null
   ) {
     return null;
   }
+
+  let completionText: string = maybeCompletionText as string;
+  // For some reason, GPT-J sometimes likes to use non-breaking spaces instead of regular spaces.
+  // We need to replace those spaces, or else the user will run into syntax errors.
+  // Snippet is from https://stackoverflow.com/a/1496863
+  completionText = completionText.replace(/\u00a0/g, " ");
 
   const cellTextBeforeCaret = cellTexts[
     caretPositionInfo.focusedCellIndex
@@ -437,4 +475,8 @@ const rootNode = document.createElement("div");
 rootNode.setAttribute("id", "parakeet-root");
 document.body.appendChild(rootNode);
 const root = createRoot(document.getElementById("parakeet-root")!);
-root.render(<Parakeet />);
+root.render(
+  <OnlyIfOnline>
+    <Parakeet />
+  </OnlyIfOnline>
+);

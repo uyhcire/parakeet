@@ -18,7 +18,10 @@ class Engine {
     }
   }
 
-  async requestLineCompletion(apiKey: string, prompt: string): Promise<string> {
+  async requestLineCompletion(
+    apiKey: string,
+    prompt: string
+  ): Promise<string | { error: "SERVER_ERROR" }> {
     const completionResponse = await fetch(
       "https://api.goose.ai/v1/engines/gpt-j-6b/completions",
       {
@@ -35,6 +38,10 @@ class Engine {
         }),
       }
     );
+
+    if (completionResponse.status !== 200) {
+      return { error: "SERVER_ERROR" };
+    }
 
     return (await completionResponse.json()).choices[0].text.split("\n")[0];
   }

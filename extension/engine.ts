@@ -1,5 +1,7 @@
 // For now, we're using GPT-J, but we can extend this class to support other language models as well.
 class Engine {
+  baseUrl = "https://api.goose.ai/v1/engines/gpt-j-6b";
+
   async testConnection(apiKey: string): Promise<boolean> {
     const response = await fetch("https://api.goose.ai/v1/engines/gpt-j-6b", {
       method: "GET",

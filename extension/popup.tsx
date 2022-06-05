@@ -74,6 +74,8 @@ const APIKeyStatus = ({
 const Popup = () => {
   const { apiKey, apiKeyStatus, setApiKey } = useApiKeyInStorage();
 
+  const engine = new Engine();
+
   return (
     <div
       // This form should look good no matter whether it is in a popup or its own tab
@@ -88,10 +90,11 @@ const Popup = () => {
         <label className="block w-full my-4 text-white">
           Engine URL{" "}
           <input
+            // For now, the engine cannot be changed.
             disabled
             className="block w-full p-2 my-2 text-xs bg-gray-600 font-mono"
             type="input"
-            value="api.goose.ai/v1/engines/gpt-j-6b/completions"
+            value={engine.baseUrl}
           />
         </label>
         <label className="block w-full my-4 text-white">

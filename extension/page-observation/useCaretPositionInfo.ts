@@ -11,6 +11,33 @@ export interface CaretPositionInfo {
   selectionStart: number;
 }
 
+// Hook into the currently-focused cell's index and the `selectionStart`
+export const getCurrentCaretPositionInfo = (): CaretPositionInfo | null => {
+  // `focusedCellIndex`
+  let cellFocusStates = [...document.querySelectorAll("div.cell")].map((cell) =>
+    cell.className.split(" ").includes("focused")
+  );
+  if (!cellFocusStates.some((isFocused) => isFocused)) {
+    // No cell is active.
+    return null;
+  }
+  const focusedCellIndex = cellFocusStates.findIndex((isFocused) => isFocused);
+
+  // `selectionStart`
+  const inputAreas: Array<HTMLTextAreaElement | null> = [
+    ...document.querySelectorAll("div.cell"),
+  ].map((cell) => cell.querySelector("textarea.inputarea"));
+  // `null` if the focused cell is off-screen; in that case, it's okay to not show a completion.
+  const selectionStart = inputAreas[focusedCellIndex]?.selectionStart;
+  const selectionEnd = inputAreas[focusedCellIndex]?.selectionEnd;
+  if (selectionStart == null || selectionEnd !== selectionStart) {
+    // Don't show a completion if there is no caret, or if the user is trying to select something.
+    return null;
+  }
+
+  return { focusedCellIndex, selectionStart };
+};
+
 /**
  * Provides the user's most up-to-date caret position.
  */
@@ -19,41 +46,6 @@ const useCaretPositionInfo = (): CaretPositionInfo | null => {
     throw new Error("Only Colab is supported for now");
   }
 
-  // Hook into the currently-focused cell's index and the `selectionStart`
-  const getCurrentCaretPositionInfo = (): CaretPositionInfo | null => {
-    // `focusedCellIndex`
-    let cellFocusStates = [
-      ...document.querySelectorAll("colab-run-button"),
-    ].map((cellRunButton) =>
-      // This will yield `false` if the cell is off-screen and virtualized. It's safe to assume that such a cell is not focused.
-      Boolean(
-        cellRunButton.shadowRoot
-          ?.querySelector("div.cell-execution")
-          ?.classList.contains("focused")
-      )
-    );
-    if (!cellFocusStates.some((isFocused) => isFocused)) {
-      // No cell is active.
-      return null;
-    }
-    const focusedCellIndex = cellFocusStates.findIndex(
-      (isFocused) => isFocused
-    );
-
-    // `selectionStart`
-    const inputAreas: Array<HTMLTextAreaElement | null> = [
-      ...document.querySelectorAll("div.cell"),
-    ].map((cell) => cell.querySelector("textarea.inputarea"));
-    // `null` if the focused cell is off-screen; in that case, it's okay to not show a completion.
-    const selectionStart = inputAreas[focusedCellIndex]?.selectionStart;
-    const selectionEnd = inputAreas[focusedCellIndex]?.selectionEnd;
-    if (selectionStart == null || selectionEnd !== selectionStart) {
-      // Don't show a completion if there is no caret, or if the user is trying to select something.
-      return null;
-    }
-
-    return { focusedCellIndex, selectionStart };
-  };
   const [caretPositionInfo, setCaretPositionInfo] =
     React.useState<CaretPositionInfo | null>(getCurrentCaretPositionInfo());
 

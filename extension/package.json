@@ -7,17 +7,22 @@
   "scripts": {
     "typecheck": "tsc -p . --noEmit",
     "build-fast": "rm -rf dist/ && parcel build manifest.json --config @parcel/config-webextension --no-optimize --no-content-hash",
-    "build": "yarn run typecheck && yarn run build-fast"
+    "build": "yarn run typecheck && yarn run build-fast",
+    "test": "jest"
   },
   "devDependencies": {
     "@parcel/config-webextension": "^2.5.0",
     "@types/chrome": "^0.0.188",
+    "@types/jest": "^28.1.1",
     "@types/parcel-bundler": "^1.12.4",
     "@types/react": "^18.0.9",
     "@types/react-dom": "^18.0.4",
+    "jest": "^28.1.0",
+    "jest-environment-jsdom": "^28.1.0",
     "parcel": "^2.5.0",
     "postcss": "^8.4.14",
     "tailwindcss": "^3.0.24",
+    "ts-jest": "^28.0.4",
     "typescript": "^4.6.4"
   },
   "dependencies": {

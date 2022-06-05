@@ -322,11 +322,7 @@ const Parakeet = (): JSX.Element | null => {
     return null;
   }
 
-  let completionText: string = maybeCompletionText as string;
-  // For some reason, GPT-J sometimes likes to use non-breaking spaces instead of regular spaces.
-  // We need to replace those spaces, or else the user will run into syntax errors.
-  // Snippet is from https://stackoverflow.com/a/1496863
-  completionText = completionText.replace(/\u00a0/g, " ");
+  const completionText = maybeCompletionText as string;
 
   const cellTextBeforeCaret = cellTexts[
     caretPositionInfo.focusedCellIndex

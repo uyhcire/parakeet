@@ -1,4 +1,4 @@
-import React, { KeyboardEvent, ReactNode } from "react";
+import React, { KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { useDebounce, useEventListenerRef, useMutationObserver } from "rooks";
@@ -6,10 +6,12 @@ import { Alert, Snackbar } from "@mui/material";
 // @ts-ignore
 import useOnlineStatus from "@rehooks/online-status";
 
+import { NOTEBOOK_TYPE } from "./config/env";
 import Engine from "./engine";
-
-// TODO: add Jupyter support
-const NOTEBOOK_TYPE = "colab";
+import useCaretPositionInfo, {
+  CaretPositionInfo,
+} from "./page-observation/useCaretPositionInfo";
+import useCellTexts from "./page-observation/useCellTexts";
 
 /**
  * Reduce network errors by only mounting the given component when the browser can connect to the Internet.
@@ -22,137 +24,6 @@ const OnlyIfOnline = ({
   const isOnline = useOnlineStatus();
 
   return isOnline ? children : null;
-};
-
-/**
- * A simplified representation of "where the user is" in their notebook.
- */
-interface CaretPositionInfo {
-  focusedCellIndex: number;
-  selectionStart: number;
-}
-
-/**
- * Provides the user's most up-to-date caret position.
- */
-const useCaretPositionInfo = (): CaretPositionInfo | null => {
-  if (NOTEBOOK_TYPE !== "colab") {
-    throw new Error("Only Colab is supported for now");
-  }
-
-  // Hook into the currently-focused cell's index and the `selectionStart`
-  const getCurrentCaretPositionInfo = (): CaretPositionInfo | null => {
-    // `focusedCellIndex`
-    let cellFocusStates = [
-      ...document.querySelectorAll("colab-run-button"),
-    ].map((cellRunButton) =>
-      // This will yield `false` if the cell is off-screen and virtualized. It's safe to assume that such a cell is not focused.
-      Boolean(
-        cellRunButton.shadowRoot
-          ?.querySelector("div.cell-execution")
-          ?.classList.contains("focused")
-      )
-    );
-    if (!cellFocusStates.some((isFocused) => isFocused)) {
-      // No cell is active.
-      return null;
-    }
-    const focusedCellIndex = cellFocusStates.findIndex(
-      (isFocused) => isFocused
-    );
-
-    // `selectionStart`
-    const inputAreas: Array<HTMLTextAreaElement | null> = [
-      ...document.querySelectorAll("div.cell"),
-    ].map((cell) => cell.querySelector("textarea.inputarea"));
-    // `null` if the focused cell is off-screen; in that case, it's okay to not show a completion.
-    const selectionStart = inputAreas[focusedCellIndex]?.selectionStart;
-    const selectionEnd = inputAreas[focusedCellIndex]?.selectionEnd;
-    if (selectionStart == null || selectionEnd !== selectionStart) {
-      // Don't show a completion if there is no caret, or if the user is trying to select something.
-      return null;
-    }
-
-    return { focusedCellIndex, selectionStart };
-  };
-  const [caretPositionInfo, setCaretPositionInfo] =
-    React.useState<CaretPositionInfo | null>(getCurrentCaretPositionInfo());
-
-  // Stay up to date with DOM additions and deletions, as well as caret movements.
-  const bodyRef = React.useRef(document.body);
-  useMutationObserver(bodyRef, (mutations) => {
-    if (mutations.length > 0) {
-      setCaretPositionInfo(getCurrentCaretPositionInfo());
-    }
-  });
-
-  return caretPositionInfo;
-};
-
-/**
- * Provides the text value of each Colab cell. The text values are extracted by parsing Colab's DOM structure.
- *
- * The main complication is that Colab "virtualizes" its cells.
- * Off-screen cells are rendered differently, and we must account for that.
- */
-const useColabCellTexts = (): Array<string> | null => {
-  if (NOTEBOOK_TYPE !== "colab") {
-    throw new Error("Only Colab is supported for now");
-  }
-
-  const [cellTexts, setCellTexts] = React.useState<Array<string> | null>(null);
-
-  // Stay up to date with DOM additions and deletions, as well as caret movements.
-  const bodyRef = React.useRef(document.body);
-  useMutationObserver(bodyRef, (mutations) => {
-    if (mutations.length > 0) {
-      setCellTexts(
-        (() =>
-          [...document.querySelectorAll("div.cell")].map((cell): string => {
-            if (cell.querySelector(".markdown") != null) {
-              // For now, ignore Markdown cells. If we want to parse them, we can use Showdown (https://www.npmjs.com/package/showdown).
-              // But we'll need to be careful about: (1) limiting CPU load, (2) doing special handling of images and TeX
-              return "";
-            }
-
-            const cellEditor = cell.querySelector("div.lazy-editor");
-            if (cellEditor == null) {
-              throw new Error("Expected code cell to have an editor component");
-            }
-
-            let visible = Boolean(cellEditor.querySelector(".monaco"));
-            if (visible) {
-              return [...cellEditor.querySelectorAll(".view-line")]
-                .map(({ textContent }) => textContent)
-                .join("\n");
-            } else {
-              const contentNode = cellEditor.querySelector(
-                "pre.lazy-virtualized > pre.monaco-colorized"
-              );
-              if (!contentNode) {
-                throw new Error(
-                  'Expected each off-screen non-rendered cell to have a <pre class="lazy-virtualized..."> element'
-                );
-              }
-
-              let cellValue = "";
-              for (const subNode of contentNode.children) {
-                if (subNode.tagName === "SPAN") {
-                  cellValue += subNode.textContent;
-                } else if (subNode.tagName === "BR") {
-                  cellValue += "\n";
-                } else {
-                  throw new Error(`Unexpected tag type '${subNode.tagName}'`);
-                }
-              }
-              return cellValue;
-            }
-          }))()
-      );
-    }
-  });
-
-  return cellTexts;
 };
 
 const useDebouncedLMCompletion = (
@@ -382,7 +253,7 @@ const Parakeet = (): JSX.Element | null => {
   }
 
   // Extract the text of each cell and the position of the user's caret
-  const cellTexts = useColabCellTexts();
+  const cellTexts = useCellTexts();
   const caretPositionInfo: CaretPositionInfo | null = useCaretPositionInfo();
 
   const maybeCompletionText = useDebouncedLMCompletion(

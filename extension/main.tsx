@@ -280,6 +280,7 @@ const Parakeet = (): JSX.Element | null => {
       cellTexts?.forEach((cellText, i) => {
         if (i < focusedCellIndex) {
           prompt += cellText;
+          prompt += "\n\n";
         } else if (i === focusedCellIndex) {
           prompt += cellText.slice(0, caretPositionInfo.selectionStart);
         } else {

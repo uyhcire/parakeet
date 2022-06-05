@@ -76,32 +76,38 @@ const Popup = () => {
 
   return (
     <div
-      className="flex flex-col items-center p-12"
-      style={{ width: "500px", background: "rgb(58, 71, 92)" }}
+      // This form should look good no matter whether it is in a popup or its own tab
+      className="w-screen h-screen flex flex-col items-center"
+      style={{ background: "rgb(58, 71, 92)", minWidth: "500px" }}
     >
-      <img src={logo.toString()} alt="logo" />
-      <label className="block w-full my-4 text-white">
-        Engine URL{" "}
-        <input
-          disabled
-          className="block w-full p-2 my-2 text-xs bg-gray-600 font-mono"
-          type="input"
-          value="api.goose.ai/v1/engines/gpt-j-6b/completions"
-        />
-      </label>
-      <label className="block w-full my-4 text-white">
-        API key<span className="px-1"> </span>
-        <APIKeyStatus apiKeyStatus={apiKeyStatus} />
-        <input
-          className="block w-full p-2 my-2 text-xs bg-gray-500 font-mono"
-          type="input"
-          disabled={apiKey == null} // disable if still loading
-          value={apiKey ?? ""}
-          onChange={(e) => {
-            setApiKey(e.target.value);
-          }}
-        />
-      </label>
+      <div
+        className="flex flex-col items-center p-12"
+        style={{ width: "500px" }}
+      >
+        <img src={logo.toString()} alt="logo" />
+        <label className="block w-full my-4 text-white">
+          Engine URL{" "}
+          <input
+            disabled
+            className="block w-full p-2 my-2 text-xs bg-gray-600 font-mono"
+            type="input"
+            value="api.goose.ai/v1/engines/gpt-j-6b/completions"
+          />
+        </label>
+        <label className="block w-full my-4 text-white">
+          API key<span className="px-1"> </span>
+          <APIKeyStatus apiKeyStatus={apiKeyStatus} />
+          <input
+            className="block w-full p-2 my-2 text-xs bg-gray-500 font-mono"
+            type="input"
+            disabled={apiKey == null} // disable if still loading
+            value={apiKey ?? ""}
+            onChange={(e) => {
+              setApiKey(e.target.value);
+            }}
+          />
+        </label>
+      </div>
     </div>
   );
 };

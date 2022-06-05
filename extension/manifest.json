@@ -3,6 +3,9 @@
   "description": "A sidekick to help write code in notebooks",
   "version": "0.0.1",
   "manifest_version": 3,
+  "background": {
+    "service_worker": "background.ts"
+  },
   "content_scripts": [
     {
       "matches": ["https://*.colab.research.google.com/*"],
@@ -16,6 +19,7 @@
     "128": "icon.png"
   },
   "permissions": [
-    "storage"
+    "storage",
+    "tabs"
   ]
 }

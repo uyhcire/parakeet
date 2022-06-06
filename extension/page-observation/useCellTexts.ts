@@ -4,7 +4,7 @@ import { useMutationObserver } from "rooks";
 import { NOTEBOOK_TYPE } from "../config/env";
 
 export const getCurrentCellTexts = (): Array<string> =>
-  [...document.querySelectorAll("div.cell")].map((cell): string => {
+  [...document.querySelectorAll("div.cell")].map((cell) => {
     if (cell.querySelector(".markdown") != null) {
       // For now, ignore Markdown cells. If we want to parse them, we can use Showdown (https://www.npmjs.com/package/showdown).
       // But we'll need to be careful about: (1) limiting CPU load, (2) doing special handling of images and TeX

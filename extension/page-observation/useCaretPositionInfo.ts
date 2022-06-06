@@ -11,7 +11,6 @@ export interface CaretPositionInfo {
   selectionStart: number;
 }
 
-// Hook into the currently-focused cell's index and the `selectionStart`
 export const getCurrentCaretPositionInfo = (): CaretPositionInfo | null => {
   // `focusedCellIndex`
   let cellFocusStates = [...document.querySelectorAll("div.cell")].map((cell) =>

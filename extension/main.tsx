@@ -1,10 +1,13 @@
 import React, { KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
-import { useDebounce, useEventListenerRef, useMutationObserver } from "rooks";
+import {
+  useDebounce,
+  useEventListenerRef,
+  useMutationObserver,
+  useOnline,
+} from "rooks";
 import { Alert, Snackbar } from "@mui/material";
-// @ts-ignore
-import useOnlineStatus from "@rehooks/online-status";
 
 import { NOTEBOOK_TYPE } from "./config/env";
 import Engine from "./engine";
@@ -21,7 +24,7 @@ const OnlyIfOnline = ({
 }: {
   children: JSX.Element;
 }): JSX.Element | null => {
-  const isOnline = useOnlineStatus();
+  const isOnline = useOnline();
 
   return isOnline ? children : null;
 };

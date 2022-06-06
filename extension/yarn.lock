@@ -1456,11 +1456,6 @@
   resolved "https://registry.yarnpkg.com/@popperjs/core/-/core-2.11.5.tgz#db5a11bf66bdab39569719555b0f76e138d7bd64"
   integrity sha512-9X2obfABZuDVLCgPK9aX0a/x4jaOEweTTWE2+9sr0Qqqevj2Uv5XorvusThmc9XGYpS9yI+fhh8RTafBtGposw==
 
-"@rehooks/online-status@^1.1.2":
-  version "1.1.2"
-  resolved "https://registry.yarnpkg.com/@rehooks/online-status/-/online-status-1.1.2.tgz#0c11122e0bbe42424ca8f4cc3a2fd290229a7252"
-  integrity sha512-tuz6RtdgqkBMZr82UqTkzPCsHNx6tpEyhTZ5OD8WhDpU4/TLzljBCseuWLlbeQiygbM9F2A4Ea7P+wyjohJXBw==
-
 "@sinclair/typebox@^0.23.3":
   version "0.23.5"
   resolved "https://registry.yarnpkg.com/@sinclair/typebox/-/typebox-0.23.5.tgz#93f7b9f4e3285a7a9ade7557d9a8d36809cbc47d"

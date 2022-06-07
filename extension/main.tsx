@@ -9,7 +9,7 @@ import {
 } from "rooks";
 import { Alert, Snackbar } from "@mui/material";
 
-import { NOTEBOOK_TYPE } from "./config/env";
+import useNotebookType, { NotebookType } from "./config/useNotebookType";
 import Engine from "./engine";
 import useCaretPositionInfo, {
   CaretPositionInfo,
@@ -27,6 +27,16 @@ const OnlyIfOnline = ({
   const isOnline = useOnline();
 
   return isOnline ? children : null;
+};
+
+const NotebookTypeProvider = ({
+  children,
+}: {
+  children: (notebookType: NotebookType) => JSX.Element;
+}): JSX.Element | null => {
+  const notebookType = useNotebookType();
+
+  return notebookType != null ? children(notebookType) : null;
 };
 
 const useDebouncedLMCompletion = (
@@ -95,6 +105,77 @@ const useDebouncedLMCompletion = (
   return completion;
 };
 
+interface LineDisplayInfo {
+  computedStyle: CSSStyleDeclaration;
+  right: number;
+  top: number;
+}
+
+const useLineDisplayInfo = (
+  notebookType: NotebookType,
+  focusedCellIndex: number,
+  lineNumberInCell: number
+): LineDisplayInfo => {
+  const getLineDisplayInfo = React.useCallback((): LineDisplayInfo => {
+    let lineNode;
+    if (notebookType === NotebookType.COLAB) {
+      lineNode = document
+        .querySelectorAll("div.cell") // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
+        [focusedCellIndex].querySelectorAll("div.view-line")[lineNumberInCell];
+    } else if (notebookType === NotebookType.JUPYTER) {
+      lineNode = document
+        .querySelectorAll("div.cell")
+        [focusedCellIndex].querySelectorAll("pre.CodeMirror-line")[
+        lineNumberInCell
+      ];
+    } else {
+      throw new Error(`Unknown notebook type ${notebookType}`);
+    }
+    const computedStyle = getComputedStyle(lineNode);
+
+    let lineSpanRect: DOMRect;
+    if (notebookType === NotebookType.COLAB) {
+      if (
+        lineNode.children.length !== 1 ||
+        lineNode.children[0].tagName !== "SPAN"
+      ) {
+        throw new Error(
+          "Expected every Monaco line to have one top-level span"
+        );
+      }
+      lineSpanRect = lineNode.children[0].getBoundingClientRect();
+    } else if (notebookType === NotebookType.JUPYTER) {
+      lineSpanRect = lineNode
+        .querySelector("span[role=presentation]")!
+        .getBoundingClientRect();
+    } else {
+      throw new Error(`Unknown notebook type ${notebookType}`);
+    }
+    const { right, top } = lineSpanRect;
+
+    return { computedStyle, right, top };
+  }, [focusedCellIndex, lineNumberInCell, notebookType]);
+
+  const [lineDisplayInfo, setLineDisplayInfo] = React.useState<LineDisplayInfo>(
+    getLineDisplayInfo()
+  );
+
+  React.useEffect(() => {
+    setLineDisplayInfo(getLineDisplayInfo());
+  }, [getLineDisplayInfo, setLineDisplayInfo]);
+
+  // This mutation observer is rather aggressive,
+  // but it doesn't seem to lower the overall framerate too much.
+  const bodyRef = React.useRef(document.body);
+  useMutationObserver(bodyRef, (mutations) => {
+    if (mutations.length > 0) {
+      setLineDisplayInfo(getLineDisplayInfo());
+    }
+  });
+
+  return lineDisplayInfo;
+};
+
 /**
  * Show a completion next to the caret in the currently active cell.
  *
@@ -105,38 +186,38 @@ const useDebouncedLMCompletion = (
  * The completion must be positioned and styled carefully, so that it can blend in well with the cell's existing code.
  */
 const Completion = ({
+  notebookType,
+
   focusedCellIndex,
   lineNumberInCell,
 
   text,
 }: {
+  notebookType: NotebookType;
+
   focusedCellIndex: number;
   lineNumberInCell: number;
 
   text: string;
 }) => {
-  if (NOTEBOOK_TYPE !== "colab") {
-    throw new Error("Only Colab is supported for now");
-  }
-
-  const lineNode = document
-    .querySelectorAll("div.cell") // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
-    [focusedCellIndex].querySelectorAll("div.view-line")[lineNumberInCell];
-  const lineComputedStyle = getComputedStyle(lineNode);
-
-  if (
-    lineNode.children.length !== 1 ||
-    lineNode.children[0].tagName !== "SPAN"
-  ) {
-    throw new Error("Expected every Monaco line to have one top-level span");
-  }
-  // This could theoretically get out of date, but over a day or so of testing I haven't seen that happen at all.
-  const lineSpanRect = lineNode.children[0].getBoundingClientRect();
+  const {
+    computedStyle: lineComputedStyle,
+    right: lineRight,
+    top: lineTop,
+  } = useLineDisplayInfo(notebookType, focusedCellIndex, lineNumberInCell);
 
   // Locate the notebook's main content, so that the displayed completion can be positioned relative to it.
+  let notebookScrollContainerSelector: string;
+  if (notebookType === NotebookType.COLAB) {
+    notebookScrollContainerSelector = "div.notebook-content";
+  } else if (notebookType === NotebookType.JUPYTER) {
+    notebookScrollContainerSelector = 'div[id="notebook-container"]';
+  } else {
+    throw new Error(`Unknown notebook type ${notebookType}`);
+  }
   const bodyRef = React.useRef(document.body);
   const notebookScrollContainerRef = React.useRef(
-    document.querySelector("div.notebook-content")
+    document.querySelector(notebookScrollContainerSelector)
   );
   useMutationObserver(bodyRef, (mutations) => {
     if (notebookScrollContainerRef.current) {
@@ -144,7 +225,7 @@ const Completion = ({
     }
     if (mutations.length > 0 && mutations[0].type === "childList") {
       notebookScrollContainerRef.current = document.querySelector(
-        "div.notebook-content"
+        notebookScrollContainerSelector
       );
     }
   });
@@ -157,10 +238,11 @@ const Completion = ({
 
   return createPortal(
     <div
+      data-parakeet="completion"
       style={{
         /* Appearance */
 
-        color: "gray", // looks pretty good in Colab, but may need to be different for Jupyter
+        color: "gray", // this looks good in both Colab (in dark mode) and Jupyter
 
         fontFamily: lineComputedStyle.fontFamily,
         fontFeatureSettings: lineComputedStyle.fontFeatureSettings,
@@ -176,15 +258,42 @@ const Completion = ({
         // The completion is positioned relative to the notebook content's scroll container, rather than the whole viewport.
         // This way, the completion will move naturally with the page content as you scroll.
         // The last term is needed to adjust for the container's margin.
-        left: `calc(${lineSpanRect.right}px - ${
-          notebookScrollContainerRect.left
-        }px + ${
+        left: `calc(${lineRight}px - ${notebookScrollContainerRect.left}px + ${
           getComputedStyle(notebookScrollContainerRef.current).marginLeft
         }`,
-        // The last term is needed because for some reason, this `top` specifies the top of the text, not the top of the div.
-        top: `calc(${lineSpanRect.top}px
-          - ${notebookScrollContainerRect.top}px
-          + ${lineComputedStyle.height} - ${lineComputedStyle.fontSize})`,
+        // To debug the positioning, compare the top of the completion ([data-parakeet=completion]) to the top of the line.
+        // For example, in Jupyter, the line's DOM node is `document.querySelectorAll("div.cell")[...].querySelectorAll("pre.CodeMirror-line")[...].querySelector("span[role=presentation]")`.
+        top: (() => {
+          if (notebookType === NotebookType.COLAB) {
+            // This formula works, but I have no idea why.
+            return (
+              "calc(" +
+              [
+                `${lineTop}px`,
+                `- ${notebookScrollContainerRect.top}px`,
+                `+ ${lineComputedStyle.height}`,
+                `- ${lineComputedStyle.fontSize}`,
+              ].join(" ") +
+              ")"
+            );
+          } else if (notebookType === NotebookType.JUPYTER) {
+            // This formula works, but I have no idea why.
+            return (
+              "calc(" +
+              [
+                `${lineTop}px`,
+                `- ${notebookScrollContainerRect.top}px`,
+                `+ ${lineComputedStyle.height}`,
+                // Why does Jupyter need this extra term, while Colab doesn't?
+                `+ ${lineComputedStyle.height}`,
+                `- ${lineComputedStyle.fontSize}`,
+              ].join(" ") +
+              ")"
+            );
+          } else {
+            throw new Error(`Unknown notebook type ${notebookType}`);
+          }
+        })(),
         zIndex: 1,
       }}
     >
@@ -195,16 +304,14 @@ const Completion = ({
 };
 
 const Inserter = ({
+  notebookType,
   focusedCellIndex,
   completion,
 }: {
+  notebookType: NotebookType;
   focusedCellIndex: number;
   completion: string;
 }) => {
-  if (NOTEBOOK_TYPE !== "colab") {
-    throw new Error("Only Colab is supported for now");
-  }
-
   const ref = useEventListenerRef("keydown", function (e: KeyboardEvent) {
     if (
       e.key === "Tab" &&
@@ -224,11 +331,23 @@ const Inserter = ({
       e.stopPropagation(); // don't actually type a Tab in the cell
     }
   });
+
+  // Attach the event listener to the caret, which in both Colab and Jupyter is a DOM node.
   const updateCaretRef = React.useCallback(() => {
-    const inputAreas: Array<HTMLTextAreaElement | null> = [
-      ...document.querySelectorAll("div.cell"),
-    ].map((cell) => cell.querySelector("textarea.inputarea"));
-    ref(inputAreas[focusedCellIndex]);
+    if (notebookType === NotebookType.COLAB) {
+      const inputAreas: Array<HTMLTextAreaElement | null> = [
+        ...document.querySelectorAll("div.cell"),
+      ].map((cell) => cell.querySelector("textarea.inputarea"));
+      ref(inputAreas[focusedCellIndex]);
+    } else if (notebookType === NotebookType.JUPYTER) {
+      ref(
+        document
+          .querySelector("div.cell.selected")
+          ?.querySelector("textarea") ?? null
+      );
+    } else {
+      throw new Error(`Unknown notebook type ${notebookType}`);
+    }
   }, [focusedCellIndex, ref]);
   // Stay up to date with DOM additions and deletions, as well as caret movements.
   const bodyRef = React.useRef(document.body);
@@ -249,15 +368,15 @@ const Inserter = ({
  *
  * Displays a completion when appropriate, and inserts the completion into the cell if the user confirms.
  */
-const Parakeet = (): JSX.Element | null => {
-  // The selectors we're using are all Colab-specific. To support Jupyter, we'll need to rewrite much of this component's code.
-  if (NOTEBOOK_TYPE !== "colab") {
-    throw new Error("Only Colab is supported for now");
-  }
-
+const Parakeet = ({
+  notebookType,
+}: {
+  notebookType: NotebookType;
+}): JSX.Element | null => {
   // Extract the text of each cell and the position of the user's caret
-  const cellTexts = useCellTexts();
-  const caretPositionInfo: CaretPositionInfo | null = useCaretPositionInfo();
+  const cellTexts = useCellTexts(notebookType);
+  const caretPositionInfo: CaretPositionInfo | null =
+    useCaretPositionInfo(notebookType);
 
   const maybeCompletionText = useDebouncedLMCompletion(
     // Prompt:
@@ -336,11 +455,13 @@ const Parakeet = (): JSX.Element | null => {
   return (
     <>
       <Completion
+        notebookType={notebookType}
         focusedCellIndex={caretPositionInfo.focusedCellIndex}
         lineNumberInCell={lineNumberInCell}
         text={completionText}
       />
       <Inserter
+        notebookType={notebookType}
         focusedCellIndex={caretPositionInfo.focusedCellIndex}
         completion={completionText}
       />
@@ -354,6 +475,8 @@ document.body.appendChild(rootNode);
 const root = createRoot(document.getElementById("parakeet-root")!);
 root.render(
   <OnlyIfOnline>
-    <Parakeet />
+    <NotebookTypeProvider>
+      {(notebookType) => <Parakeet notebookType={notebookType} />}
+    </NotebookTypeProvider>
   </OnlyIfOnline>
 );

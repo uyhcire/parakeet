@@ -21,16 +21,16 @@ const useNotebookType = (): NotebookType | null => {
     if (window.location.host.endsWith("colab.research.google.com")) {
       setNotebookType(NotebookType.COLAB);
     }
-  }, []);
+  }, [notebookType]);
 
   // Jupyter is a bit trickier to detect.
-  const bodyRef = React.useRef(document.body);
+  const bodyRef = React.useRef<HTMLElement | null>(document.body);
   useMutationObserver(bodyRef, (mutations) => {
     if (mutations.length > 0) {
       if (document.querySelector("div[id=ipython-main-app]") != null) {
         setNotebookType(NotebookType.JUPYTER);
         // The notebook type never changes, so there's no need to update it any more.
-        (bodyRef.current as any) = null;
+        bodyRef.current = null;
       }
     }
   });

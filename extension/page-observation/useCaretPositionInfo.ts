@@ -15,7 +15,7 @@ export interface CaretPositionInfo {
 export const getCurrentCaretPositionInfoForColab =
   (): CaretPositionInfo | null => {
     // `focusedCellIndex`
-    let cellFocusStates = [...document.querySelectorAll("div.cell")].map(
+    const cellFocusStates = [...document.querySelectorAll("div.cell")].map(
       (cell) => cell.className.split(" ").includes("focused")
     );
     if (!cellFocusStates.some((isFocused) => isFocused)) {
@@ -44,7 +44,7 @@ export const getCurrentCaretPositionInfoForColab =
 export const getCurrentCaretPositionInfoForJupyter =
   (): CaretPositionInfo | null => {
     // `focusedCellIndex`
-    let cellFocusStates = [...document.querySelectorAll("div.cell")].map(
+    const cellFocusStates = [...document.querySelectorAll("div.cell")].map(
       (cell) => cell.className.split(" ").includes("selected")
     );
     if (!cellFocusStates.some((isFocused) => isFocused)) {

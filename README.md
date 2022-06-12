@@ -4,8 +4,8 @@ Parakeet is like [Copilot](https://copilot.github.com/), but for Colab and Jupyt
 
 # Installing
 
-* Get a [GooseAI](https://goose.ai/) account and get an API key
-* Build the extension:
+- Get a [GooseAI](https://goose.ai/) account and get an API key. (If you have access to OpenAI's Codex private beta, you can use that account instead.)
+- Build the extension:
 
 ```
 cd extension/
@@ -13,6 +13,6 @@ yarn install
 yarn build
 ```
 
-* Load the `dist` directory as a Chrome extension using `Load unpacked`
-* Enter your API key when prompted
-* Open any Colab notebook and start typing!
+- Load the `dist` directory as a Chrome extension using `Load unpacked`
+- Enter your API key when prompted
+- Open any Colab notebook and start typing!

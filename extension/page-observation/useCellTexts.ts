@@ -17,7 +17,7 @@ export const getCurrentCellTextsForColab = (): Array<string> =>
       throw new Error("Expected code cell to have an editor component");
     }
 
-    let visible = Boolean(cellEditor.querySelector(".monaco"));
+    const visible = Boolean(cellEditor.querySelector(".monaco"));
     if (visible) {
       return [...cellEditor.querySelectorAll(".view-line")]
         .map((lineNode) => {

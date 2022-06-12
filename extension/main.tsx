@@ -10,11 +10,12 @@ import {
 import { Alert, Snackbar } from "@mui/material";
 
 import useNotebookType, { NotebookType } from "./config/useNotebookType";
-import Engine from "./engine";
+import { createEngine } from "./engine";
 import useCaretPositionInfo, {
   CaretPositionInfo,
 } from "./page-observation/useCaretPositionInfo";
 import useCellTexts from "./page-observation/useCellTexts";
+import useCredentials from "./useCredentials";
 
 /**
  * Reduce network errors by only mounting the given component when the browser can connect to the Internet.
@@ -46,40 +47,13 @@ const useDebouncedLMCompletion = (
     string | null | { error: "SERVER_ERROR" }
   >(null);
 
-  const [apiKey, setApiKey] = React.useState<string | null>(null);
-  // Initial value
-  React.useEffect(() => {
-    chrome.storage.sync.get("PARAKEET_API_KEY", (items) => {
-      setApiKey(items["PARAKEET_API_KEY"] ?? null);
-    });
-  }, []);
-  // If the API key is updated while this content script is running,
-  // the new API key should be usable without refreshing the page.
-  type StorageChangeCallback = Parameters<
-    typeof chrome.storage.onChanged.addListener
-  >[0];
-  const onStorageChanged = React.useCallback<StorageChangeCallback>(
-    (changes) => {
-      const newApiKey: string | null =
-        changes["PARAKEET_API_KEY"]?.newValue ?? null;
-      if (newApiKey != null && apiKey == null) {
-        setApiKey(newApiKey);
-      }
-    },
-    [apiKey, setApiKey]
-  );
-  React.useEffect(() => {
-    chrome.storage.onChanged.addListener(onStorageChanged);
-    return () => {
-      chrome.storage.onChanged.removeListener(onStorageChanged);
-    };
-  }, [onStorageChanged]);
-
-  const engine = new Engine();
-
+  const { engineType, apiKey } = useCredentials()?.currentEngineCreds ?? {
+    engineType: null,
+    apiKey: null,
+  };
   const doRequestCompletion = React.useCallback(
     async (prompt_: string) => {
-      if (apiKey == null) {
+      if (engineType == null || apiKey == null) {
         return;
       }
 
@@ -89,10 +63,12 @@ const useDebouncedLMCompletion = (
         return;
       }
 
+      const engine = createEngine(engineType, apiKey);
       const newCompletion = await engine.requestLineCompletion(apiKey, prompt_);
+
       setCompletion(newCompletion);
     },
-    [setCompletion, apiKey]
+    [engineType, apiKey, setCompletion]
   );
   const doRequestCompletionDebounced = useDebounce(doRequestCompletion, 1000);
   React.useEffect(() => {
@@ -119,13 +95,11 @@ const useLineDisplayInfo = (
   const getLineDisplayInfo = React.useCallback((): LineDisplayInfo => {
     let lineNode;
     if (notebookType === NotebookType.COLAB) {
-      lineNode = document
-        .querySelectorAll("div.cell") // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
-        [focusedCellIndex].querySelectorAll("div.view-line")[lineNumberInCell];
+      const cellNode = document.querySelectorAll("div.cell")[focusedCellIndex]; // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
+      lineNode = cellNode.querySelectorAll("div.view-line")[lineNumberInCell];
     } else if (notebookType === NotebookType.JUPYTER) {
-      lineNode = document
-        .querySelectorAll("div.cell")
-        [focusedCellIndex].querySelectorAll("pre.CodeMirror-line")[
+      const cellNode = document.querySelectorAll("div.cell")[focusedCellIndex];
+      lineNode = cellNode.querySelectorAll("pre.CodeMirror-line")[
         lineNumberInCell
       ];
     } else {
@@ -348,7 +322,7 @@ const Inserter = ({
     } else {
       throw new Error(`Unknown notebook type ${notebookType}`);
     }
-  }, [focusedCellIndex, ref]);
+  }, [focusedCellIndex, notebookType, ref]);
   // Stay up to date with DOM additions and deletions, as well as caret movements.
   const bodyRef = React.useRef(document.body);
   useMutationObserver(bodyRef, (mutations) => {

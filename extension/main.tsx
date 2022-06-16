@@ -70,7 +70,7 @@ const useDebouncedLMCompletion = (
     },
     [engineType, apiKey, setCompletion]
   );
-  const doRequestCompletionDebounced = useDebounce(doRequestCompletion, 1000);
+  const doRequestCompletionDebounced = useDebounce(doRequestCompletion, 500);
   React.useEffect(() => {
     setCompletion(null);
     if (prompt != null) {

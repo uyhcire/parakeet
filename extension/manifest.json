@@ -4,22 +4,28 @@
   "version": "0.0.1",
   "manifest_version": 3,
   "background": {
-    "service_worker": "background.ts"
+    "service_worker": "background.ts",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "content_scripts": [
     {
-      "matches": ["https://*.colab.research.google.com/*", "https://*/jupyterhub/*"],
-      "js": ["main.tsx"]
+      "matches": [
+        "https://*.colab.research.google.com/*",
+        "https://*/jupyterhub/*"
+      ],
+      "js": [
+        "main.tsx"
+      ]
     }
   ],
-  "action": {
-    "default_popup": "popup.html"
-  },
   "icons": {
     "128": "icon.png"
   },
   "permissions": [
-    "storage",
-    "tabs"
+    "storage"
   ]
 }

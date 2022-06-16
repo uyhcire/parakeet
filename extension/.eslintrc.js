@@ -25,7 +25,6 @@ module.exports = {
   ignorePatterns: [
     ".eslintrc.js",
     "jest.config.js",
-    "tailwind.config.js",
     "dist",
     "node_modules",
   ],

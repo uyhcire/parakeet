@@ -1,10 +1,4 @@
-import { FirebaseApp, FirebaseError, initializeApp } from "firebase/app";
-import { getAuth, signInWithCustomToken, User } from "firebase/auth";
-import {
-  getFunctions,
-  httpsCallable,
-  HttpsCallableResult,
-} from "firebase/functions";
+import { SnackbarProvider, useSnackbar } from "notistack";
 import React, { KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -14,47 +8,51 @@ import {
   useMutationObserver,
   useOnline,
 } from "rooks";
+import { Link, Zoom } from "@mui/material";
 
-import firebaseConfig from "./config/firebaseConfig";
-import useNotebookType, { NotebookType } from "./config/useNotebookType";
+import config from "./config.json";
 import useCaretPositionInfo, {
   CaretPositionInfo,
 } from "./page-observation/useCaretPositionInfo";
 import useCellTexts from "./page-observation/useCellTexts";
+import useNotebookType, { NotebookType } from "./page-observation/useNotebookType";
 
-const _app = initializeApp(firebaseConfig);
-const _auth = getAuth(_app);
-const useAuthenticatedFirebaseApp = (): FirebaseApp | null => {
-  const [app, setApp] = React.useState<FirebaseApp | null>(null);
+const useAccessToken = (): {
+  accessToken: string | null;
+  invalidateAccessToken: () => void;
+} => {
+  const [accessToken, setAccessToken] = React.useState<string | null>(null);
+
   React.useEffect(() => {
-    // Check for a custom auth token on init
-    chrome.storage.sync.get(["customAuthToken"], (result) => {
-      if (result.customAuthToken) {
-        signInWithCustomToken(_auth, result.customAuthToken);
-      }
-
-      // The user could log in or change accounts at any point, so we need to always be listening for new custom auth tokens.
-      chrome.storage.onChanged.addListener((changes, area) => {
-        if (area === "sync" && "customAuthToken" in changes) {
-          const customAuthToken = changes.customAuthToken.newValue;
-          if (customAuthToken) {
-            signInWithCustomToken(_auth, customAuthToken);
-          }
-        }
-      });
-    });
-
-    _auth.onAuthStateChanged((user: User | null) => {
-      if (user != null) {
-        console.log(
-          `Parakeet: signed in. Email: ${user.providerData[0].email}`
-        );
-        setApp(_app);
-      }
+    chrome.storage.sync.get(["auth0AccessToken"], (result) => {
+      setAccessToken(result.auth0AccessToken);
     });
   }, []);
 
-  return app;
+  React.useEffect(() => {
+    const listener = (changes: {
+      [key: string]: chrome.storage.StorageChange;
+    }) => {
+      if ("auth0AccessToken" in changes) {
+        // If the user logs in, this will make their access token available to Parakeet.
+        // If the user logs out, this will take Parakeet's access token away.
+        setAccessToken(changes.auth0AccessToken.newValue);
+      }
+    };
+    chrome.storage.onChanged.addListener(listener);
+    return () => {
+      chrome.storage.onChanged.removeListener(listener);
+    };
+  }, []);
+
+  const invalidateAccessToken = React.useCallback(() => {
+    setAccessToken(null);
+  }, []);
+
+  return {
+    accessToken,
+    invalidateAccessToken,
+  };
 };
 
 /**
@@ -81,17 +79,21 @@ const NotebookTypeProvider = ({
 };
 
 const useDebouncedLMCompletion = ({
-  firebaseApp,
+  accessToken,
+  invalidateAccessToken,
   prompt,
 }: {
-  firebaseApp: FirebaseApp | null;
+  accessToken: string | null;
+  invalidateAccessToken: () => void;
   prompt: string | null;
 }): string | null => {
+  const { enqueueSnackbar } = useSnackbar();
+
   const [completion, setCompletion] = React.useState<string | null>(null);
 
   const doRequestCompletion = React.useCallback(
     async (prompt_: string, startTimePreDebounce: Date) => {
-      if (firebaseApp == null) {
+      if (accessToken == null) {
         return;
       }
 
@@ -100,34 +102,70 @@ const useDebouncedLMCompletion = ({
         return;
       }
 
-      const functions = getFunctions(firebaseApp);
-      const getCustomAuthTokenCloudFunction = httpsCallable(
-        functions,
-        "parakeet/codex"
-      );
-      try {
-        const result: HttpsCallableResult =
-          await getCustomAuthTokenCloudFunction({ prompt: prompt_ });
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data = result.data as any;
-        const newCompletion = data.completion!;
+      const response = await fetch(`https://${config.flyio_domain}/codex`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ prompt: prompt_ }),
+      });
 
-        console.log(
-          `Parakeet: LM request (including the wait for debouncing) took ${
-            new Date().getTime() - startTimePreDebounce.getTime()
-          }ms`
-        );
+      switch (response.status) {
+        case 200: {
+          const { completion: newCompletion } = await response.json();
 
-        setCompletion(newCompletion);
-      } catch (e) {
-        if (e instanceof FirebaseError) {
-          return; // fail silently and let the user continue uninterrupted with whatever code they are typing
-        } else {
-          throw e;
+          console.log(
+            `Parakeet: LM request (including the wait for debouncing) took ${
+              new Date().getTime() - startTimePreDebounce.getTime()
+            }ms`
+          );
+
+          setCompletion(newCompletion);
+
+          return;
         }
+        case 401: {
+          invalidateAccessToken();
+          enqueueSnackbar(
+            <span>
+              You must{" "}
+              <Link
+                onClick={() => {
+                  chrome.runtime.sendMessage("signIn");
+                }}
+              >
+                sign in
+              </Link>{" "}
+              (or sign back in) to use Parakeet.
+            </span>,
+            { variant: "warning", persist: true }
+          );
+          return;
+        }
+        case 429: {
+          enqueueSnackbar(
+            "Parakeet completions will be available again in a few moments.",
+            { variant: "info" }
+          );
+          return;
+        }
+        default:
+          enqueueSnackbar(
+            <span>
+              Parakeet ran into an unexpected error. If this continues, you can
+              file an issue{" "}
+              <Link href="https://github.com/uyhcire/parakeet/issues/new/choose">
+                on GitHub
+              </Link>
+              .
+            </span>,
+            { variant: "error" }
+          );
+          return;
       }
     },
-    [firebaseApp, setCompletion]
+    [accessToken, enqueueSnackbar, invalidateAccessToken, setCompletion]
   );
   const doRequestCompletionDebounced = useDebounce(doRequestCompletion, 500);
   React.useEffect(() => {
@@ -407,7 +445,7 @@ const Parakeet = ({
 }: {
   notebookType: NotebookType;
 }): JSX.Element | null => {
-  const firebaseApp = useAuthenticatedFirebaseApp();
+  const { accessToken, invalidateAccessToken } = useAccessToken();
 
   // Extract the text of each cell and the position of the user's caret
   const cellTexts = useCellTexts(notebookType);
@@ -415,7 +453,8 @@ const Parakeet = ({
     useCaretPositionInfo(notebookType);
 
   const maybeCompletionText = useDebouncedLMCompletion({
-    firebaseApp,
+    accessToken,
+    invalidateAccessToken,
     prompt: ((): string | null => {
       // Don't request a completion if we don't know what's before the caret
       if (caretPositionInfo == null || cellTexts == null) {
@@ -493,8 +532,17 @@ document.body.appendChild(rootNode);
 const root = createRoot(document.getElementById("parakeet-root")!);
 root.render(
   <OnlyIfOnline>
-    <NotebookTypeProvider>
-      {(notebookType) => <Parakeet notebookType={notebookType} />}
-    </NotebookTypeProvider>
+    <SnackbarProvider
+      anchorOrigin={{
+        vertical: "top",
+        horizontal: "center",
+      }}
+      preventDuplicate
+      TransitionComponent={Zoom}
+    >
+      <NotebookTypeProvider>
+        {(notebookType) => <Parakeet notebookType={notebookType} />}
+      </NotebookTypeProvider>
+    </SnackbarProvider>
   </OnlyIfOnline>
 );

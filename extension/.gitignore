@@ -1,5 +1,6 @@
 .parcel-cache
-config/firebaseConfig.ts
+config.json
 dist/
+key.pem
 node_modules/
 yarn-error.log

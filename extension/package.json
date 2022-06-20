@@ -7,7 +7,7 @@
   "scripts": {
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc -p . --noEmit",
-    "build-fast": "rm -rf dist/ && parcel build manifest.json --config @parcel/config-webextension --no-optimize",
+    "build-fast": "./build.sh",
     "build": "yarn run lint && yarn run typecheck && yarn run build-fast",
     "test": "jest"
   },
@@ -20,11 +20,13 @@
     "@types/react-dom": "^18.0.4",
     "@typescript-eslint/eslint-plugin": "^5.27.1",
     "@typescript-eslint/parser": "^5.27.1",
+    "buffer": "^6.0.3",
     "eslint": "^8.17.0",
     "eslint-plugin-react": "^7.30.0",
     "eslint-plugin-react-hooks": "^4.5.0",
     "jest": "^28.1.0",
     "jest-environment-jsdom": "^28.1.0",
+    "json": "^11.0.0",
     "parcel": "^2.5.0",
     "postcss": "^8.4.14",
     "process": "^0.11.10",
@@ -32,11 +34,14 @@
     "typescript": "^4.6.4"
   },
   "dependencies": {
+    "@auth0/auth0-react": "^1.10.1",
+    "@emotion/react": "^11.9.3",
+    "@emotion/styled": "^11.9.3",
+    "@mui/material": "^5.8.4",
     "@swc/helpers": "^0.3.13",
-    "firebase": "^9.8.3",
+    "notistack": "^2.0.5",
     "react": "^18.1.0",
     "react-dom": "^18.1.0",
-    "react-firebaseui": "^6.0.0",
     "rooks": "^5.11.2"
   }
 }

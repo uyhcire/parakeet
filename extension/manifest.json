@@ -8,7 +8,7 @@
     "type": "module"
   },
   "options_ui": {
-    "page": "options.html",
+    "page": "options_auth0.html",
     "open_in_tab": true
   },
   "content_scripts": [

@@ -15,7 +15,9 @@ import useCaretPositionInfo, {
   CaretPositionInfo,
 } from "./page-observation/useCaretPositionInfo";
 import useCellTexts from "./page-observation/useCellTexts";
-import useNotebookType, { NotebookType } from "./page-observation/useNotebookType";
+import useNotebookType, {
+  NotebookType,
+} from "./page-observation/useNotebookType";
 
 const useAccessToken = (): {
   accessToken: string | null;
@@ -78,7 +80,7 @@ const NotebookTypeProvider = ({
   return notebookType != null ? children(notebookType) : null;
 };
 
-const useDebouncedLMCompletion = ({
+const useCompletion = ({
   accessToken,
   invalidateAccessToken,
   prompt,
@@ -89,17 +91,63 @@ const useDebouncedLMCompletion = ({
 }): string | null => {
   const { enqueueSnackbar } = useSnackbar();
 
-  const [completion, setCompletion] = React.useState<string | null>(null);
+  type CompletionResultInfo = {
+    prompt: string;
+    completion: string;
+  };
+  const [completionResultInfo, setCompletionResultInfo] =
+    React.useState<CompletionResultInfo | null>(null);
 
-  const doRequestCompletion = React.useCallback(
-    async (prompt_: string, startTimePreDebounce: Date) => {
+  const processPrompt = React.useCallback(
+    async (
+      prompt_: string,
+      completionResultInfo_: CompletionResultInfo | null,
+      startTimePreDebounce: Date
+    ): Promise<void> => {
+      const noCompletion = {
+        prompt: prompt_,
+        completion: "",
+      };
+
       if (accessToken == null) {
+        setCompletionResultInfo(noCompletion);
         return;
       }
 
       // Empty prompts are not likely to give good results.
       if (prompt_ === "") {
+        setCompletionResultInfo(noCompletion);
         return;
+      }
+
+      // Handle the cases where the completion can be determined without a request, using the cached previous completion.
+      //
+      // Case 1:
+      //
+      // If the user accepts a completion, we should not make another request to LM right away, but only after additional input has been entered.
+      //
+      // If we make another request without rating, the returned completion will simply be blank, which is not helpful. (It is blank because
+      // the previous request has already completed the entire line, and we are still on the same line.)
+      //
+      // This optimization is very important, because it can save *up to 2x* on the number of requests made to the LM,
+      // which makes it much easier to stay within OpenAI's rate limits.
+      if (
+        completionResultInfo_ != null &&
+        prompt_ ===
+          completionResultInfo_.prompt + completionResultInfo_.completion
+      ) {
+        setCompletionResultInfo(noCompletion);
+        return;
+      }
+      //
+      // Case 2:
+      //
+      // If the prompt is the same as before, the completion is the same too.
+      if (
+        completionResultInfo_ != null &&
+        prompt_ === completionResultInfo_.prompt
+      ) {
+        return; // no state update needed, since nothing has changed
       }
 
       const response = await fetch(`https://${config.flyio_domain}/codex`, {
@@ -121,8 +169,10 @@ const useDebouncedLMCompletion = ({
             }ms`
           );
 
-          setCompletion(newCompletion);
-
+          setCompletionResultInfo({
+            prompt: prompt_,
+            completion: newCompletion,
+          });
           return;
         }
         case 401: {
@@ -141,6 +191,8 @@ const useDebouncedLMCompletion = ({
             </span>,
             { variant: "warning", persist: true }
           );
+
+          setCompletionResultInfo(noCompletion);
           return;
         }
         case 429: {
@@ -148,9 +200,11 @@ const useDebouncedLMCompletion = ({
             "Parakeet completions will be available again in a few moments.",
             { variant: "info" }
           );
+
+          setCompletionResultInfo(noCompletion);
           return;
         }
-        default:
+        default: {
           enqueueSnackbar(
             <span>
               Parakeet ran into an unexpected error. If this continues, you can
@@ -162,20 +216,36 @@ const useDebouncedLMCompletion = ({
             </span>,
             { variant: "error" }
           );
+
+          setCompletionResultInfo(noCompletion);
           return;
+        }
       }
     },
-    [accessToken, enqueueSnackbar, invalidateAccessToken, setCompletion]
+    [accessToken, enqueueSnackbar, invalidateAccessToken]
   );
-  const doRequestCompletionDebounced = useDebounce(doRequestCompletion, 500);
-  React.useEffect(() => {
-    setCompletion(null);
-    if (prompt != null) {
-      const startTimePreDebounce = new Date();
-      doRequestCompletionDebounced(prompt, startTimePreDebounce);
-    }
-  }, [doRequestCompletionDebounced, prompt]);
+  const processPromptDebounced: typeof processPrompt = useDebounce(
+    processPrompt,
+    500
+  );
 
+  const completionResultInfoJson = JSON.stringify(completionResultInfo);
+  React.useEffect(() => {
+    const startTimePreDebounce = new Date();
+    if (prompt != null) {
+      processPromptDebounced(
+        prompt,
+        JSON.parse(completionResultInfoJson),
+        startTimePreDebounce
+      );
+    }
+  }, [completionResultInfoJson, processPromptDebounced, prompt]);
+
+  const completion =
+    completionResultInfo != null && completionResultInfo.prompt === prompt
+      ? completionResultInfo.completion
+      : // The completion is unavailable or it is out of date
+        null;
   return completion;
 };
 
@@ -246,6 +316,43 @@ const useLineDisplayInfo = (
   });
 
   return lineDisplayInfo;
+};
+
+const constructPrompt = (
+  caretPositionInfo: CaretPositionInfo | null,
+  cellTexts: Array<string> | null
+): string | null => {
+  // Don't request a completion if we don't know what's before the caret
+  if (caretPositionInfo == null || cellTexts == null) {
+    return null;
+  }
+
+  // Don't request a completion if the caret is in the middle of a line
+  const cellTextAfterCaret = cellTexts[
+    caretPositionInfo.focusedCellIndex
+  ].slice(caretPositionInfo.selectionStart);
+  const isCaretAtEndOfLine =
+    cellTextAfterCaret.length === 0 || cellTextAfterCaret[0] === "\n";
+  if (!isCaretAtEndOfLine) {
+    return null;
+  }
+
+  const { focusedCellIndex } = caretPositionInfo;
+
+  let prompt = "";
+  cellTexts?.forEach((cellText, i) => {
+    if (i < focusedCellIndex) {
+      prompt += cellText;
+      prompt += "\n\n";
+    } else if (i === focusedCellIndex) {
+      prompt += cellText.slice(0, caretPositionInfo.selectionStart);
+    } else {
+      // i > focusedCellIndex
+      return;
+    }
+  });
+
+  return prompt;
 };
 
 /**
@@ -452,56 +559,16 @@ const Parakeet = ({
   const caretPositionInfo: CaretPositionInfo | null =
     useCaretPositionInfo(notebookType);
 
-  const maybeCompletionText = useDebouncedLMCompletion({
+  const completion = useCompletion({
     accessToken,
     invalidateAccessToken,
-    prompt: ((): string | null => {
-      // Don't request a completion if we don't know what's before the caret
-      if (caretPositionInfo == null || cellTexts == null) {
-        return null;
-      }
-
-      // Don't request a completion if the caret is in the middle of a line
-      const cellTextAfterCaret = cellTexts[
-        caretPositionInfo.focusedCellIndex
-      ].slice(caretPositionInfo.selectionStart);
-      const isCaretAtEndOfLine =
-        cellTextAfterCaret.length === 0 || cellTextAfterCaret[0] === "\n";
-      if (!isCaretAtEndOfLine) {
-        return null;
-      }
-
-      const { focusedCellIndex } = caretPositionInfo;
-
-      let prompt = "";
-      cellTexts?.forEach((cellText, i) => {
-        if (i < focusedCellIndex) {
-          prompt += cellText;
-          prompt += "\n\n";
-        } else if (i === focusedCellIndex) {
-          prompt += cellText.slice(0, caretPositionInfo.selectionStart);
-        } else {
-          // i > focusedCellIndex
-          return;
-        }
-      });
-
-      return prompt;
-    })(),
+    prompt: constructPrompt(caretPositionInfo, cellTexts),
   });
 
-  if (
-    // Bail if there is no completion to show
-    maybeCompletionText == null ||
-    maybeCompletionText == "" ||
-    // Bail if there is not enough information to position the completion
-    caretPositionInfo == null ||
-    cellTexts == null
-  ) {
+  // Bail if there is not enough information to position the completion
+  if (caretPositionInfo == null || cellTexts == null || completion == null) {
     return null;
   }
-
-  const completionText = maybeCompletionText as string;
 
   const cellTextBeforeCaret = cellTexts[
     caretPositionInfo.focusedCellIndex
@@ -515,12 +582,12 @@ const Parakeet = ({
         notebookType={notebookType}
         focusedCellIndex={caretPositionInfo.focusedCellIndex}
         lineNumberInCell={lineNumberInCell}
-        text={completionText}
+        text={completion}
       />
       <Inserter
         notebookType={notebookType}
         focusedCellIndex={caretPositionInfo.focusedCellIndex}
-        completion={completionText}
+        completion={completion}
       />
     </>
   );

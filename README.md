@@ -62,11 +62,28 @@ Optionally, you can use a "passwordless" auth flow to let users sign in with the
 
 ![The code to change](./auth0_login_screen_code.png)
 
-## Deploy the Node.js endpoint to fly.io
+## Deploy to fly.io
 
-- Set up fly.io by following the instructions [here](https://fly.io/docs/speedrun/)
-- Import your OpenAI API key by running `flyctl secrets import` and then entering `OPENAI_API_KEY=...`
+First, some preliminary steps:
+
+- Set up a fly.io account and install the CLI by following the instructions [here](https://fly.io/docs/speedrun/)
+- Come up with a password for Redis and write it down
+
+Now, you can deploy Redis and the Node.js endpoint.
+
+### Redis
+
+In the `redis-rate-limiter` directory, do the following:
+
+- Use `flyctl secrets import` to set a value for `REDIS_PASSWORD`
+- Run `flyctl deploy`
+
+### Node.js endpoint
+
+In the `codex-endpoint` directory, do the following:
+
 - Deploy the Node.js endpoint using `flyctl launch`
+- Use `flyctl secrets import` to set the values for `REDIS_PASSWORD` and `OPENAI_API_KEY`
 - Write down the URL of the API endpoint
 
 ## Set up `config.json`

@@ -2,8 +2,16 @@ import * as cors from "cors";
 import * as express from "express";
 import { auth } from "express-oauth2-jwt-bearer";
 import fetch from "node-fetch";
+import * as redis from "redis";
 
 const config = require("./config.json");
+
+// The URL to connect to is documented at https://fly.io/docs/reference/redis/
+const redisClient = redis.createClient({
+  url: `redis://redis-rate-limiter.internal:6379`,
+  username: "default",
+  password: process.env.REDIS_PASSWORD,
+});
 
 const app = express();
 
@@ -47,6 +55,45 @@ app.post(
         .send(
           "To access the OpenAI API, you must be authenticated as a specific user."
         );
+      return;
+    }
+
+    // Enforce the rate limit.
+    // Source for the Lua script: https://levelup.gitconnected.com/implementing-a-sliding-log-rate-limiter-with-redis-and-golang-79db8a297b9e
+    const script: string = `
+    -- Parse arguments
+    local user_id = KEYS[1]
+    local current_time = tonumber(ARGV[1])  -- in units of seconds
+    local window_length = tonumber(ARGV[2])
+    local per_window_limit = tonumber(ARGV[3])
+
+    -- Remove keys that are no longer relevant
+    local clearBefore = current_time - window_length
+    redis.call('ZREMRANGEBYSCORE', user_id, 0, clearBefore)
+
+    -- Return the number of allowed requests remaining,
+    -- and account for the new request if it will go through
+    local remaining_allowance = per_window_limit - redis.call('ZCARD', user_id)
+    if remaining_allowance > 0 then
+      redis.call('ZADD', user_id, current_time, current_time)
+    end
+    return remaining_allowance`;
+    const remainingRequestsAllowed = (await redisClient.eval(script, {
+      keys: [userSubId],
+      arguments: [
+        // The current time, in seconds
+        String(new Date().getTime() / 1000),
+        // Time window: 1 minute
+        "60",
+        // Maximum request count: 60
+        "60",
+      ],
+    })) as number;
+    if (remainingRequestsAllowed <= 0) {
+      res.status(429).header("Content-Type", "application/json").send(
+        { data: {} } // avoid giving away any sensitive information
+      );
+      return;
     }
 
     const prompt = req.body?.prompt;
@@ -157,4 +204,11 @@ app.post(
 );
 
 const port = process.env.PORT || 3000;
-app.listen(port, () => console.log(`Listening on port ${port}`));
+redisClient
+  .connect()
+  .then(() => {
+    app.listen(port, () => console.log(`Listening on port ${port}`));
+  })
+  .catch((err) => {
+    throw new Error(`Could not connect to Redis. Error: "${err}"`);
+  });

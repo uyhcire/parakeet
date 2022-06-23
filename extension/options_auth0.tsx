@@ -107,9 +107,10 @@ const LoginRedirector = () => {
           />
           <button
             onClick={async () => {
+              const currentUrl =
+                window.location.origin + window.location.pathname; // excludes query params
               await logout({
-                returnTo:
-                  "chrome-extension://kfcajalofajngnlomhfplkapaijhmdba/options_auth0.915298d6.html?logout=true",
+                returnTo: currentUrl + "?logout=true",
               });
               // Content scripts will no longer have access to the Codex endpoint.
               chrome.storage.sync.set({ auth0AccessToken: null });

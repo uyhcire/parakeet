@@ -1,6 +1,5 @@
 .parcel-cache
 config.json
 dist/
-key.pem
 node_modules/
 yarn-error.log

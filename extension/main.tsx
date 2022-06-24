@@ -94,9 +94,28 @@ const useCompletion = ({
   type CompletionResultInfo = {
     prompt: string;
     completion: string;
+    requestStartTime: Date;
   };
-  const [completionResultInfo, setCompletionResultInfo] =
+  const [completionResultInfo, _setCompletionResultInfo] =
     React.useState<CompletionResultInfo | null>(null);
+  // Helper that updates the completion only if the new completion is not stale.
+  const updateCompletionResultInfo = React.useCallback(
+    (newCompletionResultInfo: CompletionResultInfo) => {
+      _setCompletionResultInfo((oldCompletionResultInfo) => {
+        // Ignore the new completion if it is stale.
+        if (
+          oldCompletionResultInfo &&
+          oldCompletionResultInfo.requestStartTime >
+            newCompletionResultInfo.requestStartTime
+        ) {
+          return oldCompletionResultInfo;
+        }
+
+        return newCompletionResultInfo;
+      });
+    },
+    []
+  );
 
   const processPrompt = React.useCallback(
     async (
@@ -110,13 +129,19 @@ const useCompletion = ({
       };
 
       if (accessToken == null) {
-        setCompletionResultInfo(noCompletion);
+        updateCompletionResultInfo({
+          ...noCompletion,
+          requestStartTime: new Date(),
+        });
         return;
       }
 
       // Empty prompts are not likely to give good results.
       if (prompt_ === "") {
-        setCompletionResultInfo(noCompletion);
+        updateCompletionResultInfo({
+          ...noCompletion,
+          requestStartTime: new Date(),
+        });
         return;
       }
 
@@ -136,7 +161,10 @@ const useCompletion = ({
         prompt_ ===
           completionResultInfo_.prompt + completionResultInfo_.completion
       ) {
-        setCompletionResultInfo(noCompletion);
+        updateCompletionResultInfo({
+          ...noCompletion,
+          requestStartTime: new Date(),
+        });
         return;
       }
       //
@@ -150,6 +178,7 @@ const useCompletion = ({
         return; // no state update needed, since nothing has changed
       }
 
+      const requestStartTime = new Date();
       const response = await fetch(`https://${config.flyio_domain}/codex`, {
         method: "POST",
         headers: {
@@ -169,9 +198,10 @@ const useCompletion = ({
             }ms`
           );
 
-          setCompletionResultInfo({
+          updateCompletionResultInfo({
             prompt: prompt_,
             completion: newCompletion,
+            requestStartTime,
           });
           return;
         }
@@ -192,7 +222,7 @@ const useCompletion = ({
             { variant: "warning", persist: true }
           );
 
-          setCompletionResultInfo(noCompletion);
+          updateCompletionResultInfo({ ...noCompletion, requestStartTime });
           return;
         }
         case 429: {
@@ -201,7 +231,7 @@ const useCompletion = ({
             { variant: "info" }
           );
 
-          setCompletionResultInfo(noCompletion);
+          updateCompletionResultInfo({ ...noCompletion, requestStartTime });
           return;
         }
         default: {
@@ -217,12 +247,17 @@ const useCompletion = ({
             { variant: "error" }
           );
 
-          setCompletionResultInfo(noCompletion);
+          updateCompletionResultInfo({ ...noCompletion, requestStartTime });
           return;
         }
       }
     },
-    [accessToken, enqueueSnackbar, invalidateAccessToken]
+    [
+      accessToken,
+      enqueueSnackbar,
+      invalidateAccessToken,
+      updateCompletionResultInfo,
+    ]
   );
   const processPromptDebounced: typeof processPrompt = useDebounce(
     processPrompt,

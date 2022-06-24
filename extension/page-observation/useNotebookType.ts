@@ -1,10 +1,7 @@
 import React from "react";
 import { useMutationObserver } from "rooks";
 
-export enum NotebookType {
-  COLAB = "colab",
-  JUPYTER = "jupyter",
-}
+import { NotebookType } from "./types";
 
 const useNotebookType = (): NotebookType | null => {
   const [notebookType, setNotebookType] = React.useState<NotebookType | null>(

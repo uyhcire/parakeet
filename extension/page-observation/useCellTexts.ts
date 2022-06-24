@@ -2,7 +2,7 @@ import React from "react";
 import { useMutationObserver } from "rooks";
 
 import getJupyterLineContent from "./getJupyterLineContent";
-import { NotebookType } from "./useNotebookType";
+import { NotebookType } from "./types";
 
 export const getCurrentCellTextsForColab = (): Array<string> =>
   [...document.querySelectorAll("div.cell")].map((cell) => {

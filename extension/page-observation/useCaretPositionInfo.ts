@@ -2,15 +2,7 @@ import React from "react";
 import { useMutationObserver } from "rooks";
 
 import getJupyterLineContent from "./getJupyterLineContent";
-import { NotebookType } from "./useNotebookType";
-
-/**
- * A simplified representation of "where the user is" in their notebook.
- */
-export interface CaretPositionInfo {
-  focusedCellIndex: number;
-  selectionStart: number;
-}
+import { CaretPositionInfo, NotebookType } from "./types";
 
 export const getCurrentCaretPositionInfoForColab =
   (): CaretPositionInfo | null => {

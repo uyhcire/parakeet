@@ -11,7 +11,8 @@ test("getLineDisplayInfoForColab", () => {
     "utf8"
   );
 
-  expect(getLineDisplayInfoForColab(2, 1)).toBeTruthy();
+  expect(getLineDisplayInfoForColab(2, 1)).not.toBeNull();
+  expect(getLineDisplayInfoForColab(2, 300)).toBeNull(); // should not crash
 });
 
 test("getLineDisplayInfoForJupyter", () => {
@@ -20,5 +21,6 @@ test("getLineDisplayInfoForJupyter", () => {
     "utf8"
   );
 
-  expect(getLineDisplayInfoForJupyter(2, 0)).toBeTruthy();
+  expect(getLineDisplayInfoForJupyter(2, 0)).not.toBeNull();
+  expect(getLineDisplayInfoForJupyter(2, 300)).toBeNull(); // should not crash
 });

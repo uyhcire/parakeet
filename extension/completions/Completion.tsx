@@ -13,10 +13,14 @@ interface LineDisplayInfo {
 export const getLineDisplayInfoForColab = (
   focusedCellIndex: number,
   lineNumberInCell: number
-): LineDisplayInfo => {
+): LineDisplayInfo | null => {
   // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
   const cellNode = document.querySelectorAll("div.cell")[focusedCellIndex];
   const lineNode = cellNode.querySelectorAll("div.view-line")[lineNumberInCell];
+  // The lineNode may be null if `lineNumberInCell` is out of date, like if a line was just deleted.
+  if (lineNode == null) {
+    return null;
+  }
 
   if (
     lineNode.children.length !== 1 ||
@@ -37,11 +41,15 @@ export const getLineDisplayInfoForColab = (
 export const getLineDisplayInfoForJupyter = (
   focusedCellIndex: number,
   lineNumberInCell: number
-): LineDisplayInfo => {
+): LineDisplayInfo | null => {
   const cellNode = document.querySelectorAll("div.cell")[focusedCellIndex];
   const lineNode = cellNode.querySelectorAll("pre.CodeMirror-line")[
     lineNumberInCell
   ];
+  // The lineNode may be null if `lineNumberInCell` is out of date, like if a line was just deleted.
+  if (lineNode == null) {
+    return null;
+  }
 
   const { right, top } = lineNode
     .querySelector("span[role=presentation]")!
@@ -58,7 +66,7 @@ const getLineDisplayInfo = (
   notebookType: NotebookType,
   focusedCellIndex: number,
   lineNumberInCell: number
-): LineDisplayInfo => {
+): LineDisplayInfo | null => {
   if (notebookType === NotebookType.COLAB) {
     return getLineDisplayInfoForColab(focusedCellIndex, lineNumberInCell);
   } else if (notebookType === NotebookType.JUPYTER) {
@@ -72,10 +80,11 @@ const useLineDisplayInfo = (
   notebookType: NotebookType,
   focusedCellIndex: number,
   lineNumberInCell: number
-): LineDisplayInfo => {
-  const [lineDisplayInfo, setLineDisplayInfo] = React.useState<LineDisplayInfo>(
-    getLineDisplayInfo(notebookType, focusedCellIndex, lineNumberInCell)
-  );
+): LineDisplayInfo | null => {
+  const [lineDisplayInfo, setLineDisplayInfo] =
+    React.useState<LineDisplayInfo | null>(
+      getLineDisplayInfo(notebookType, focusedCellIndex, lineNumberInCell)
+    );
 
   React.useEffect(() => {
     setLineDisplayInfo(
@@ -155,11 +164,11 @@ const Completion = ({
 
   text: string;
 }) => {
-  const {
-    computedStyle: lineComputedStyle,
-    right: lineRight,
-    top: lineTop,
-  } = useLineDisplayInfo(notebookType, focusedCellIndex, lineNumberInCell);
+  const lineDisplayInfo = useLineDisplayInfo(
+    notebookType,
+    focusedCellIndex,
+    lineNumberInCell
+  );
 
   const notebookScrollContainerRef =
     useNotebookScrollContainerRef(notebookType);
@@ -169,6 +178,16 @@ const Completion = ({
   }
   const notebookScrollContainerRect =
     notebookScrollContainerRef.current.getBoundingClientRect();
+
+  if (lineDisplayInfo == null) {
+    // We don't yet know where the completion should be displayed, so hold off.
+    return null;
+  }
+  const {
+    computedStyle: lineComputedStyle,
+    right: lineRight,
+    top: lineTop,
+  } = lineDisplayInfo;
 
   return createPortal(
     <div

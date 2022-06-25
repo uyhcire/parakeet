@@ -7,8 +7,14 @@ import { CaretPositionInfo, NotebookType } from "./types";
 export const getCurrentCaretPositionInfoForColab =
   (): CaretPositionInfo | null => {
     // `focusedCellIndex`
-    const cellFocusStates = [...document.querySelectorAll("div.cell")].map(
-      (cell) => cell.className.split(" ").includes("focused")
+    const cellFocusStates: Array<boolean> = [
+      ...document.querySelectorAll("div.cell"),
+    ].map((cell) =>
+      Boolean(
+        // Checking for `.cell.focused` is not sufficient, because it is `focused` even when the cell is merely selected and not actively being edited.
+        // Checking for `.monaco-editor.focused`, on the other hand, does in fact give us what we need.
+        cell.querySelector("div.monaco-editor.focused")
+      )
     );
     if (!cellFocusStates.some((isFocused) => isFocused)) {
       // No cell is active.
@@ -44,8 +50,12 @@ export const getCurrentCaretPositionInfoForColab =
 export const getCurrentCaretPositionInfoForJupyter =
   (): CaretPositionInfo | null => {
     // `focusedCellIndex`
-    const cellFocusStates = [...document.querySelectorAll("div.cell")].map(
-      (cell) => cell.className.split(" ").includes("selected")
+    const cellFocusStates: Array<boolean> = [
+      ...document.querySelectorAll("div.cell"),
+    ].map((cell) =>
+      // Checking for `.cell.focused` is not sufficient, because it is `focused` even when the cell is merely selected and not actively being edited.
+      // Checking for `.CodeMirror.CodeMirror-focused`, on the other hand, does in fact give us what we need.
+      Boolean(cell.querySelector("div.CodeMirror.CodeMirror-focused"))
     );
     if (!cellFocusStates.some((isFocused) => isFocused)) {
       // No cell is active.

@@ -3,6 +3,7 @@
  */
 export interface CaretPositionInfo {
   focusedCellIndex: number;
+  focusedCellType: "CODE" | "TEXT";
   selectionStart: number;
 }
 

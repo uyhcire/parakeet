@@ -151,15 +151,29 @@ const Parakeet = ({
   const caretPositionInfo: CaretPositionInfo | null =
     useCaretPositionInfo(notebookType);
 
+  let prompt: string | null = null;
+  if (
+    cellTexts != null &&
+    caretPositionInfo != null &&
+    // Don't show completions for Markdown cells. (There's no fundamental reason why we can't, but it's not worth the complexity for now.)
+    caretPositionInfo.focusedCellType === "CODE"
+  ) {
+    prompt = constructPrompt(caretPositionInfo, cellTexts);
+  }
+
   const completion = useCompletion({
     accessToken,
     enqueueSnackbar,
     invalidateAccessToken,
-    prompt: constructPrompt(caretPositionInfo, cellTexts),
+    prompt,
   });
 
   // Bail if there is not enough information to position the completion
-  if (caretPositionInfo == null || cellTexts == null || completion == null) {
+  if (completion == null) {
+    return null;
+  }
+  // This condition is never met, but checking this makes TypeScript happy
+  if (cellTexts == null || caretPositionInfo == null) {
     return null;
   }
 

@@ -83,6 +83,7 @@ test("Determines the active caret position in a Jupyter notebook", () => {
       );
       expect(getCurrentCaretPositionInfoForJupyter()).toEqual({
         focusedCellIndex: 2,
+        focusedCellType: "CODE",
         selectionStart: Number(caretPositionInLine), // the cell in this particular snapshot only has one line
       });
     }

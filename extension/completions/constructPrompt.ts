@@ -1,14 +1,9 @@
 import { CaretPositionInfo } from "../page-observation/types";
 
 const constructPrompt = (
-  caretPositionInfo: CaretPositionInfo | null,
-  cellTexts: Array<string> | null
+  caretPositionInfo: CaretPositionInfo,
+  cellTexts: Array<string>
 ): string | null => {
-  // Don't request a completion if we don't know what's before the caret
-  if (caretPositionInfo == null || cellTexts == null) {
-    return null;
-  }
-
   // Don't request a completion if the caret is in the middle of a line
   const cellTextAfterCaret = cellTexts[
     caretPositionInfo.focusedCellIndex

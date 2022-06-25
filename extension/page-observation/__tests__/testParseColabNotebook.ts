@@ -22,6 +22,7 @@ test("Parses a Colab notebook properly", () => {
 
   expect(getCurrentCaretPositionInfoForColab()).toEqual({
     focusedCellIndex: 2,
+    focusedCellType: "CODE",
     // The real selectionStart is generally not 0, but the selectionStart is set by Monaco's JS code which this test doesn't have access to.
     selectionStart: 0,
   });

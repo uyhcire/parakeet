@@ -30,7 +30,15 @@ export const getCurrentCaretPositionInfoForColab =
       return null;
     }
 
-    return { focusedCellIndex, selectionStart };
+    const focusedCellNode =
+      document.querySelectorAll("div.cell")[focusedCellIndex];
+    return {
+      focusedCellIndex,
+      focusedCellType: focusedCellNode.classList.contains("code")
+        ? "CODE"
+        : "TEXT",
+      selectionStart,
+    };
   };
 
 export const getCurrentCaretPositionInfoForJupyter =
@@ -114,7 +122,15 @@ export const getCurrentCaretPositionInfoForJupyter =
     }
     selectionStart += caretLineNumber; // account for newlines as well
 
-    return { focusedCellIndex, selectionStart };
+    const focusedCellNode =
+      document.querySelectorAll("div.cell")[focusedCellIndex];
+    return {
+      focusedCellIndex,
+      focusedCellType: focusedCellNode.classList.contains("code_cell")
+        ? "CODE"
+        : "TEXT",
+      selectionStart,
+    };
   };
 
 /**

@@ -6,7 +6,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "moduleResolution": "Node",
-    "jsx": "preserve",
+    "jsx": "react",
     "resolveJsonModule": true
   }
 }

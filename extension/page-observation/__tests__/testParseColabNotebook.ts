@@ -1,12 +1,11 @@
 import fs from "fs";
-import path from "path";
 
 import { getCurrentCaretPositionInfoForColab } from "../useCaretPositionInfo";
 import { getCurrentCellTextsForColab } from "../useCellTexts";
 
 test("Parses a Colab notebook properly", () => {
   document.body.innerHTML = fs.readFileSync(
-    path.resolve(__dirname, "./colab_snapshot.html"),
+    `${process.env.PROJECT_ROOT}/testdata/colab_snapshot.html`,
     "utf8"
   );
 

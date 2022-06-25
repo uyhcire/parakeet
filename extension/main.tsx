@@ -1,4 +1,4 @@
-import { SnackbarProvider } from "notistack";
+import { SnackbarProvider, useSnackbar } from "notistack";
 import React, { KeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
 import { useEventListenerRef, useMutationObserver, useOnline } from "rooks";
@@ -144,6 +144,7 @@ const Parakeet = ({
   notebookType: NotebookType;
 }): JSX.Element | null => {
   const { accessToken, invalidateAccessToken } = useAccessToken();
+  const { enqueueSnackbar } = useSnackbar();
 
   // Extract the text of each cell and the position of the user's caret
   const cellTexts = useCellTexts(notebookType);
@@ -152,6 +153,7 @@ const Parakeet = ({
 
   const completion = useCompletion({
     accessToken,
+    enqueueSnackbar,
     invalidateAccessToken,
     prompt: constructPrompt(caretPositionInfo, cellTexts),
   });

@@ -1,21 +1,23 @@
-import { Link } from "@mui/material";
-import { useSnackbar } from "notistack";
+import { ProviderContext } from "notistack";
 import React from "react";
 import { useDebounce } from "rooks";
+import { Link } from "@mui/material";
 
 import config from "../config.json";
 
 const useCompletion = ({
   accessToken,
+  enqueueSnackbar,
   invalidateAccessToken,
   prompt,
 }: {
   accessToken: string | null;
+  enqueueSnackbar: (
+    ...args: Parameters<ProviderContext["enqueueSnackbar"]>
+  ) => void;
   invalidateAccessToken: () => void;
   prompt: string | null;
 }): string | null => {
-  const { enqueueSnackbar } = useSnackbar();
-
   type CompletionResultInfo = {
     prompt: string;
     completion: string;
@@ -45,7 +47,8 @@ const useCompletion = ({
   const processPrompt = React.useCallback(
     async (
       prompt_: string,
-      completionResultInfo_: CompletionResultInfo | null,
+      oldCompletion: string | null,
+      oldPrompt: string | null,
       startTimePreDebounce: Date
     ): Promise<void> => {
       const noCompletion = {
@@ -82,9 +85,9 @@ const useCompletion = ({
       // This optimization is very important, because it can save *up to 2x* on the number of requests made to the LM,
       // which makes it much easier to stay within OpenAI's rate limits.
       if (
-        completionResultInfo_ != null &&
-        prompt_ ===
-          completionResultInfo_.prompt + completionResultInfo_.completion
+        oldPrompt != null &&
+        oldCompletion != null &&
+        prompt_ === oldPrompt + oldCompletion
       ) {
         updateCompletionResultInfo({
           ...noCompletion,
@@ -96,10 +99,7 @@ const useCompletion = ({
       // Case 2:
       //
       // If the prompt is the same as before, the completion is the same too.
-      if (
-        completionResultInfo_ != null &&
-        prompt_ === completionResultInfo_.prompt
-      ) {
+      if (oldPrompt != null && prompt_ === oldPrompt) {
         return; // no state update needed, since nothing has changed
       }
 
@@ -189,17 +189,19 @@ const useCompletion = ({
     500
   );
 
-  const completionResultInfoJson = JSON.stringify(completionResultInfo);
+  const oldCompletion = completionResultInfo?.completion ?? null;
+  const oldPrompt = completionResultInfo?.prompt ?? null;
   React.useEffect(() => {
     const startTimePreDebounce = new Date();
     if (prompt != null) {
       processPromptDebounced(
         prompt,
-        JSON.parse(completionResultInfoJson),
+        oldCompletion,
+        oldPrompt,
         startTimePreDebounce
       );
     }
-  }, [completionResultInfoJson, processPromptDebounced, prompt]);
+  }, [oldCompletion, oldPrompt, processPromptDebounced, prompt]);
 
   const completion =
     completionResultInfo != null && completionResultInfo.prompt === prompt

@@ -10,67 +10,125 @@ interface LineDisplayInfo {
   top: number;
 }
 
+export const getLineDisplayInfoForColab = (
+  focusedCellIndex: number,
+  lineNumberInCell: number
+): LineDisplayInfo => {
+  // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
+  const cellNode = document.querySelectorAll("div.cell")[focusedCellIndex];
+  const lineNode = cellNode.querySelectorAll("div.view-line")[lineNumberInCell];
+
+  if (
+    lineNode.children.length !== 1 ||
+    lineNode.children[0].tagName !== "SPAN"
+  ) {
+    throw new Error("Expected every Monaco line to have one top-level span");
+  }
+
+  const { right, top } = lineNode.children[0].getBoundingClientRect();
+
+  return {
+    computedStyle: getComputedStyle(lineNode),
+    right,
+    top,
+  };
+};
+
+export const getLineDisplayInfoForJupyter = (
+  focusedCellIndex: number,
+  lineNumberInCell: number
+): LineDisplayInfo => {
+  const cellNode = document.querySelectorAll("div.cell")[focusedCellIndex];
+  const lineNode = cellNode.querySelectorAll("pre.CodeMirror-line")[
+    lineNumberInCell
+  ];
+
+  const { right, top } = lineNode
+    .querySelector("span[role=presentation]")!
+    .getBoundingClientRect();
+
+  return {
+    computedStyle: getComputedStyle(lineNode),
+    right,
+    top,
+  };
+};
+
+const getLineDisplayInfo = (
+  notebookType: NotebookType,
+  focusedCellIndex: number,
+  lineNumberInCell: number
+): LineDisplayInfo => {
+  if (notebookType === NotebookType.COLAB) {
+    return getLineDisplayInfoForColab(focusedCellIndex, lineNumberInCell);
+  } else if (notebookType === NotebookType.JUPYTER) {
+    return getLineDisplayInfoForJupyter(focusedCellIndex, lineNumberInCell);
+  } else {
+    throw new Error(`Unknown notebook type ${notebookType}`);
+  }
+};
+
 const useLineDisplayInfo = (
   notebookType: NotebookType,
   focusedCellIndex: number,
   lineNumberInCell: number
 ): LineDisplayInfo => {
-  const getLineDisplayInfo = React.useCallback((): LineDisplayInfo => {
-    let lineNode;
-    if (notebookType === NotebookType.COLAB) {
-      const cellNode = document.querySelectorAll("div.cell")[focusedCellIndex]; // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
-      lineNode = cellNode.querySelectorAll("div.view-line")[lineNumberInCell];
-    } else if (notebookType === NotebookType.JUPYTER) {
-      const cellNode = document.querySelectorAll("div.cell")[focusedCellIndex];
-      lineNode = cellNode.querySelectorAll("pre.CodeMirror-line")[
-        lineNumberInCell
-      ];
-    } else {
-      throw new Error(`Unknown notebook type ${notebookType}`);
-    }
-    const computedStyle = getComputedStyle(lineNode);
-
-    let lineSpanRect: DOMRect;
-    if (notebookType === NotebookType.COLAB) {
-      if (
-        lineNode.children.length !== 1 ||
-        lineNode.children[0].tagName !== "SPAN"
-      ) {
-        throw new Error(
-          "Expected every Monaco line to have one top-level span"
-        );
-      }
-      lineSpanRect = lineNode.children[0].getBoundingClientRect();
-    } else if (notebookType === NotebookType.JUPYTER) {
-      lineSpanRect = lineNode
-        .querySelector("span[role=presentation]")!
-        .getBoundingClientRect();
-    } else {
-      throw new Error(`Unknown notebook type ${notebookType}`);
-    }
-    const { right, top } = lineSpanRect;
-
-    return { computedStyle, right, top };
-  }, [focusedCellIndex, lineNumberInCell, notebookType]);
-
   const [lineDisplayInfo, setLineDisplayInfo] = React.useState<LineDisplayInfo>(
-    getLineDisplayInfo()
+    getLineDisplayInfo(notebookType, focusedCellIndex, lineNumberInCell)
   );
 
   React.useEffect(() => {
-    setLineDisplayInfo(getLineDisplayInfo());
-  }, [getLineDisplayInfo, setLineDisplayInfo]);
+    setLineDisplayInfo(
+      getLineDisplayInfo(notebookType, focusedCellIndex, lineNumberInCell)
+    );
+  }, [notebookType, focusedCellIndex, lineNumberInCell]);
 
   // This mutation observer is rather aggressive,
   // but it doesn't seem to lower the overall framerate too much.
   const bodyRef = React.useRef(document.body);
   useMutationObserver(bodyRef, (mutations) => {
     if (mutations.length > 0) {
-      setLineDisplayInfo(getLineDisplayInfo());
+      setLineDisplayInfo(
+        getLineDisplayInfo(notebookType, focusedCellIndex, lineNumberInCell)
+      );
     }
   });
 
   return lineDisplayInfo;
+};
+
+const getNotebookScrollContainer = (
+  notebookType: NotebookType
+): Element | null => {
+  if (notebookType === NotebookType.COLAB) {
+    return document.querySelector("div.notebook-content");
+  } else if (notebookType === NotebookType.JUPYTER) {
+    return document.querySelector('div[id="notebook-container"]');
+  } else {
+    throw new Error(`Unknown notebook type ${notebookType}`);
+  }
+};
+
+/**
+ * Locate the notebook's main content, so that the displayed completion can be positioned relative to it.
+ */
+const useNotebookScrollContainerRef = (notebookType: NotebookType) => {
+  const bodyRef = React.useRef(document.body);
+  const notebookScrollContainerRef = React.useRef(
+    getNotebookScrollContainer(notebookType)
+  );
+
+  useMutationObserver(bodyRef, (mutations) => {
+    if (notebookScrollContainerRef.current) {
+      return; // we already know where the scroll container is
+    }
+    if (mutations.length > 0 && mutations[0].type === "childList") {
+      notebookScrollContainerRef.current =
+        getNotebookScrollContainer(notebookType);
+    }
+  });
+
+  return notebookScrollContainerRef;
 };
 
 /**
@@ -103,29 +161,8 @@ const Completion = ({
     top: lineTop,
   } = useLineDisplayInfo(notebookType, focusedCellIndex, lineNumberInCell);
 
-  // Locate the notebook's main content, so that the displayed completion can be positioned relative to it.
-  let notebookScrollContainerSelector: string;
-  if (notebookType === NotebookType.COLAB) {
-    notebookScrollContainerSelector = "div.notebook-content";
-  } else if (notebookType === NotebookType.JUPYTER) {
-    notebookScrollContainerSelector = 'div[id="notebook-container"]';
-  } else {
-    throw new Error(`Unknown notebook type ${notebookType}`);
-  }
-  const bodyRef = React.useRef(document.body);
-  const notebookScrollContainerRef = React.useRef(
-    document.querySelector(notebookScrollContainerSelector)
-  );
-  useMutationObserver(bodyRef, (mutations) => {
-    if (notebookScrollContainerRef.current) {
-      return; // we already know where the scroll container is
-    }
-    if (mutations.length > 0 && mutations[0].type === "childList") {
-      notebookScrollContainerRef.current = document.querySelector(
-        notebookScrollContainerSelector
-      );
-    }
-  });
+  const notebookScrollContainerRef =
+    useNotebookScrollContainerRef(notebookType);
   if (notebookScrollContainerRef.current == null) {
     // There is nowhere to put the completion yet
     return null;

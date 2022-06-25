@@ -1,12 +1,11 @@
 import fs from "fs";
-import path from "path";
 
 import { getCurrentCaretPositionInfoForJupyter } from "../useCaretPositionInfo";
 import { getCurrentCellTextsForJupyter } from "../useCellTexts";
 
 test("Extracts the cell texts of a Jupyter notebook", () => {
   document.body.innerHTML = fs.readFileSync(
-    path.resolve(__dirname, "./jupyter_snapshot.html"),
+    `${process.env.PROJECT_ROOT}/testdata/jupyter_snapshot.html`,
     "utf8"
   );
 
@@ -24,7 +23,7 @@ test("Extracts the cell texts of a Jupyter notebook", () => {
 
 test("Determines the active caret position in a Jupyter notebook", () => {
   document.body.innerHTML = fs.readFileSync(
-    path.resolve(__dirname, "./jupyter_snapshot.html"),
+    `${process.env.PROJECT_ROOT}/testdata/jupyter_snapshot.html`,
     "utf8"
   );
 

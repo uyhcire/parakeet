@@ -4,7 +4,10 @@
 export interface CaretPositionInfo {
   focusedCellIndex: number;
   focusedCellType: "CODE" | "TEXT";
-  selectionStart: number;
+  currentLineInfo: {
+    lineNumber: number;
+    isAtEnd: boolean;
+  };
 }
 
 export enum NotebookType {

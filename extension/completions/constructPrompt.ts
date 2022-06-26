@@ -5,12 +5,7 @@ const constructPrompt = (
   cellTexts: Array<string>
 ): string | null => {
   // Don't request a completion if the caret is in the middle of a line
-  const cellTextAfterCaret = cellTexts[
-    caretPositionInfo.focusedCellIndex
-  ].slice(caretPositionInfo.selectionStart);
-  const isCaretAtEndOfLine =
-    cellTextAfterCaret.length === 0 || cellTextAfterCaret[0] === "\n";
-  if (!isCaretAtEndOfLine) {
+  if (!caretPositionInfo.currentLineInfo.isAtEnd) {
     return null;
   }
 
@@ -22,7 +17,10 @@ const constructPrompt = (
       prompt += cellText;
       prompt += "\n\n";
     } else if (i === focusedCellIndex) {
-      prompt += cellText.slice(0, caretPositionInfo.selectionStart);
+      prompt += cellText
+        .split("\n")
+        .slice(0, caretPositionInfo.currentLineInfo.lineNumber + 1)
+        .join("\n");
     } else {
       // i > focusedCellIndex
       return;

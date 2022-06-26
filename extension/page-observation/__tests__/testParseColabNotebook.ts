@@ -9,9 +9,8 @@ test("Parses a Colab notebook properly", () => {
     "utf8"
   );
 
-  expect(
-    getCurrentCellTextsForColab().map((cellText) => cellText.split("\n"))
-  ).toEqual([
+  const cellTexts = getCurrentCellTextsForColab();
+  expect(cellTexts.map((cellText) => cellText.split("\n"))).toEqual([
     // Cell 1
     ["# Define x.", "x = 1"],
     // Cell 2 (blank)
@@ -20,10 +19,15 @@ test("Parses a Colab notebook properly", () => {
     ["# Define y.", "y = 2"],
   ]);
 
-  expect(getCurrentCaretPositionInfoForColab()).toEqual({
+  expect(getCurrentCaretPositionInfoForColab(cellTexts)).toEqual({
     focusedCellIndex: 2,
     focusedCellType: "CODE",
-    // The real selectionStart is generally not 0, but the selectionStart is set by Monaco's JS code which this test doesn't have access to.
-    selectionStart: 0,
+    // The caret looks like it is at the very beginning of the cell,
+    // because the `selectionStart` is 0 in this test. `selectionStart` is normally set by Monaco's JS code,
+    // but the Monaco JS code is not included in the HTML snapshot.
+    currentLineInfo: {
+      lineNumber: 0,
+      isAtEnd: false,
+    },
   });
 });

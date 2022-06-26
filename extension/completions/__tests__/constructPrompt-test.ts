@@ -6,7 +6,10 @@ test("constructPrompt", () => {
   const caretPositionInfo: CaretPositionInfo = {
     focusedCellIndex: 1,
     focusedCellType: "CODE",
-    selectionStart: 5,
+    currentLineInfo: {
+      lineNumber: 0,
+      isAtEnd: true,
+    },
   };
   expect(constructPrompt(caretPositionInfo, cellTexts)).toEqual("foo\n\nbar!!");
 });

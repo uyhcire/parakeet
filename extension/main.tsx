@@ -148,8 +148,10 @@ const Parakeet = ({
 
   // Extract the text of each cell and the position of the user's caret
   const cellTexts = useCellTexts(notebookType);
-  const caretPositionInfo: CaretPositionInfo | null =
-    useCaretPositionInfo(notebookType);
+  const caretPositionInfo: CaretPositionInfo | null = useCaretPositionInfo(
+    notebookType,
+    cellTexts
+  );
 
   let prompt: string | null = null;
   if (
@@ -177,18 +179,12 @@ const Parakeet = ({
     return null;
   }
 
-  const cellTextBeforeCaret = cellTexts[
-    caretPositionInfo.focusedCellIndex
-  ].slice(0, caretPositionInfo.selectionStart);
-  // https://stackoverflow.com/a/43820645
-  const lineNumberInCell = cellTextBeforeCaret.match(/\n/g)?.length ?? 0;
-
   return (
     <>
       <Completion
         notebookType={notebookType}
         focusedCellIndex={caretPositionInfo.focusedCellIndex}
-        lineNumberInCell={lineNumberInCell}
+        lineNumberInCell={caretPositionInfo.currentLineInfo.lineNumber}
         text={completion}
       />
       <Inserter

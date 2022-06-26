@@ -37,40 +37,40 @@ test("Extracts the cell texts of a Jupyter notebook", () => {
   ]);
 });
 
-// As measured in the browser
+// Measured this in the browser by logging the return value of `getElementPositions`
 const MEASURED_ELEMENT_POSITIONS = {
   caretRect: {
-    x: 576.28125,
+    x: 476.78125,
     y: 243.109375,
-    width: 3,
-    height: 0,
+    width: 1.3984375,
+    height: 17,
     top: 243.109375,
-    right: 579.28125,
-    bottom: 243.109375,
-    left: 576.28125,
+    right: 478.1796875,
+    bottom: 260.109375,
+    left: 476.78125,
   } as DOMRect,
   lineRects: [
     {
-      x: 446.2421875,
+      x: 346.7421875,
       y: 243.109375,
       width: 1001.2578125,
       height: 17,
       top: 243.109375,
-      right: 1447.5,
+      right: 1348,
       bottom: 260.109375,
-      left: 446.2421875,
+      left: 346.7421875,
     } as DOMRect,
   ],
   lineTextRects: [
     {
-      x: 450.2421875,
+      x: 350.7421875,
       y: 243.609375,
       width: 126.1328125,
       height: 16,
       top: 243.609375,
-      right: 576.375,
+      right: 476.875,
       bottom: 259.609375,
-      left: 450.2421875,
+      left: 350.7421875,
     } as DOMRect,
   ],
 };

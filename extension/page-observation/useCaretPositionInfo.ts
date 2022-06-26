@@ -87,8 +87,8 @@ export const mockableJupyterMeasurer = {
     );
 
     const caretRect = focusedCellNode
-      .querySelector("textarea")!
-      .parentElement!.getBoundingClientRect();
+      .querySelector(".CodeMirror-cursor")!
+      .getBoundingClientRect();
 
     return {
       caretRect,

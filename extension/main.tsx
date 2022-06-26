@@ -1,7 +1,7 @@
 import { SnackbarProvider, useSnackbar } from "notistack";
 import React, { KeyboardEvent } from "react";
 import { createRoot } from "react-dom/client";
-import { useEventListenerRef, useMutationObserver, useOnline } from "rooks";
+import { useOnline } from "rooks";
 import { Zoom } from "@mui/material";
 
 import Completion from "./completions/Completion";
@@ -73,62 +73,57 @@ const NotebookTypeProvider = ({
   return notebookType != null ? children(notebookType) : null;
 };
 
-const Inserter = ({
-  notebookType,
-  focusedCellIndex,
-  completion,
-}: {
-  notebookType: NotebookType;
-  focusedCellIndex: number;
-  completion: string;
-}) => {
-  const ref = useEventListenerRef("keydown", function (e: KeyboardEvent) {
-    if (
-      e.key === "Tab" &&
-      !e.ctrlKey &&
-      !e.altKey &&
-      !e.metaKey &&
-      !e.shiftKey
-    ) {
-      // Although `execCommand` is deprecated, it is the best option we have, and it is unlikely to go away any time soon.
-      // See: https://stackoverflow.com/questions/60581285/execcommand-is-now-obsolete-whats-the-alternative
-      document.execCommand(
-        "insertText",
-        false /* doesn't matter */,
-        completion
-      );
-      e.preventDefault(); // keep the cell focused
-      e.stopPropagation(); // don't actually type a Tab in the cell
-    }
-  });
+const Inserter = ({ completion }: { completion: string }) => {
+  // Capture *all* Tab keypresses if a completion is available,
+  // to prevent any funny business from the notebook's native Tab handlers.
+  // There are many such handlers that can interfere with Parakeet, since Tab
+  // is a very common keyboard shortcut for autocomplete-related functionality.
+  //
+  // Source for the idea: https://stackoverflow.com/a/19780264
+  const tabHandler = React.useCallback(
+    (e: KeyboardEvent) => {
+      // Don't interfere with normal tab handling if no completion is being shown
+      if (completion.length === 0) {
+        return;
+      }
 
-  // Attach the event listener to the caret, which in both Colab and Jupyter is a DOM node.
-  const updateCaretRef = React.useCallback(() => {
-    if (notebookType === NotebookType.COLAB) {
-      const inputAreas: Array<HTMLTextAreaElement | null> = [
-        ...document.querySelectorAll("div.cell"),
-      ].map((cell) => cell.querySelector("textarea.inputarea"));
-      ref(inputAreas[focusedCellIndex]);
-    } else if (notebookType === NotebookType.JUPYTER) {
-      ref(
-        document
-          .querySelector("div.cell.selected")
-          ?.querySelector("textarea") ?? null
-      );
-    } else {
-      throw new Error(`Unknown notebook type ${notebookType}`);
-    }
-  }, [focusedCellIndex, notebookType, ref]);
-  // Stay up to date with DOM additions and deletions, as well as caret movements.
-  const bodyRef = React.useRef(document.body);
-  useMutationObserver(bodyRef, (mutations) => {
-    if (mutations.length > 0) {
-      updateCaretRef();
-    }
-  });
+      if (
+        e.key === "Tab" &&
+        !e.ctrlKey &&
+        !e.altKey &&
+        !e.metaKey &&
+        !e.shiftKey
+      ) {
+        // Although `execCommand` is deprecated, it is the best option we have, and it is unlikely to go away any time soon.
+        // See: https://stackoverflow.com/questions/60581285/execcommand-is-now-obsolete-whats-the-alternative
+        document.execCommand(
+          "insertText",
+          false /* doesn't matter */,
+          completion
+        );
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    },
+    [completion]
+  );
   React.useEffect(() => {
-    updateCaretRef();
-  }, [focusedCellIndex, updateCaretRef]);
+    document.body.addEventListener<"keydown">(
+      "keydown",
+      // @ts-expect-error - there is a subtle mismatch in event types, but it's harmless
+      tabHandler,
+      true /* capture */
+    );
+    return () => {
+      document.body.removeEventListener(
+        "keydown",
+        // @ts-expect-error - there is a subtle mismatch in event types, but it's harmless
+        tabHandler,
+        true /* capture */
+      );
+    };
+  }, [tabHandler]);
 
   return null;
 };
@@ -187,11 +182,7 @@ const Parakeet = ({
         lineNumberInCell={caretPositionInfo.currentLineInfo.lineNumber}
         text={completion}
       />
-      <Inserter
-        notebookType={notebookType}
-        focusedCellIndex={caretPositionInfo.focusedCellIndex}
-        completion={completion}
-      />
+      <Inserter completion={completion} />
     </>
   );
 };

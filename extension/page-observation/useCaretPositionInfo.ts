@@ -165,7 +165,9 @@ const useCaretPositionInfo = (
 ): CaretPositionInfo | null => {
   const [caretPositionInfo, setCaretPositionInfo] =
     React.useState<CaretPositionInfo | null>(
-      getCurrentCaretPositionInfoForColab(cellTexts)
+      notebookType === NotebookType.COLAB
+        ? getCurrentCaretPositionInfoForColab(cellTexts)
+        : getCurrentCaretPositionInfoForJupyter()
     );
 
   // Stay up to date with DOM additions and deletions, as well as caret movements.

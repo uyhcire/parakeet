@@ -2,6 +2,7 @@ import React from "react";
 import { createPortal } from "react-dom";
 import { useMutationObserver } from "rooks";
 
+import queryColabCellLines from "../page-observation/queryColabCellLines";
 import { NotebookType } from "../page-observation/types";
 
 interface LineDisplayInfo {
@@ -16,7 +17,7 @@ export const getLineDisplayInfoForColab = (
 ): LineDisplayInfo | null => {
   // `focusedCellIndex` is inclusive of cells that are off the screen, so need to query for `div.cell` in order to include off-screen cells and not just on-screen ones
   const cellNode = document.querySelectorAll("div.cell")[focusedCellIndex];
-  const lineNode = cellNode.querySelectorAll("div.view-line")[lineNumberInCell];
+  const lineNode = queryColabCellLines(cellNode)[lineNumberInCell];
   // The lineNode may be null if `lineNumberInCell` is out of date, like if a line was just deleted.
   if (lineNode == null) {
     return null;

@@ -1,6 +1,7 @@
 import React from "react";
 import { useMutationObserver } from "rooks";
 
+import queryColabCellLines from "./queryColabCellLines";
 import { NotebookType } from "./types";
 
 export const getCurrentCellTextsForColab = (): Array<string> =>
@@ -18,7 +19,7 @@ export const getCurrentCellTextsForColab = (): Array<string> =>
 
     const visible = Boolean(cellEditor.querySelector(".monaco"));
     if (visible) {
-      return [...cellEditor.querySelectorAll(".view-line")]
+      return queryColabCellLines(cellEditor)
         .map((lineNode) => {
           let innerContent = lineNode.querySelector("span")?.textContent ?? "";
           // Colab displays non-breaking spaces rather than regular spaces. We need to convert them back.
@@ -77,6 +78,7 @@ export const getCurrentCellTextsForJupyter = (): Array<string> =>
     }
 
     const lineTexts = [];
+    // Unlike Colab, Jupyter cells seem to always have their lines in the expected order in the DOM.
     for (const lineNode of [
       ...cell.querySelectorAll("pre.CodeMirror-line"),
     ] as Array<HTMLPreElement>) {

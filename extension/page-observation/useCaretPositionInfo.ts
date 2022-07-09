@@ -32,7 +32,7 @@ export const getCurrentCaretPositionInfoForColab = (
   const inputAreas: Array<HTMLTextAreaElement | null> = [
     ...document.querySelectorAll("div.cell"),
   ].map((cell) => cell.querySelector("textarea.inputarea"));
-  // `null` if the focused cell is off-screen; in that case, it's okay to not show a completion.
+  // I've confirmed that `selectionStart` is accurate even when the lines are out of order in the DOM tree
   const selectionStart = inputAreas[focusedCellIndex]?.selectionStart;
   const selectionEnd = inputAreas[focusedCellIndex]?.selectionEnd;
   if (selectionStart == null || selectionEnd !== selectionStart) {

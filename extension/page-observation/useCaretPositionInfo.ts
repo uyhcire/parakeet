@@ -39,6 +39,12 @@ export const getCurrentCaretPositionInfoForColab = (
     // Don't show a completion if there is no caret, or if the user is trying to select something.
     return null;
   }
+  // `selectionStart` seems to max out at 500, even if the line is longer.
+  // Beyond that point, we can't estimate the caret position reliably.
+  // This scenario should be very rare, so it's okay to just return null.
+  if (selectionStart >= 500) {
+    return null;
+  }
 
   // Use the `selectionStart` to infer line info
   const cellTextBeforeCaret = cellTexts[focusedCellIndex].slice(

@@ -143,10 +143,8 @@ const Parakeet = ({
 
   // Extract the text of each cell and the position of the user's caret
   const cellTexts = useCellTexts(notebookType);
-  const caretPositionInfo: CaretPositionInfo | null = useCaretPositionInfo(
-    notebookType,
-    cellTexts
-  );
+  const caretPositionInfo: CaretPositionInfo | null =
+    useCaretPositionInfo(notebookType);
 
   let prompt: string | null = null;
   if (

@@ -1,73 +1,74 @@
 import React from "react";
 import { useMutationObserver } from "rooks";
 
+import queryColabCellLines from "./queryColabCellLines";
 import { CaretPositionInfo, NotebookType } from "./types";
 
-export const getCurrentCaretPositionInfoForColab = (
-  cellTexts: Array<string> | null
-): CaretPositionInfo | null => {
-  if (cellTexts == null) {
-    return null;
-  }
+/**
+ * Measure the caret position in Colab.
+ *
+ * Works by measuring the layout of the relevant elements. This is a bit complex to do,
+ * but it seems to be the only way to get the information we need. Monaco does expose
+ * a `selectionStart` on the cell's textarea, but from experience it is not reliable.
+ * In particular, the `selectionStart` value is often much smaller than the actual position of the caret in the cell.
+ *
+ * This function is not unit tested -- it relies heavily on `getBoundingClientRect(...)`, which is not available in the testing environment.
+ * Instead, this function was tested manually in Colab.
+ */
+export const getCurrentCaretPositionInfoForColab =
+  (): CaretPositionInfo | null => {
+    // `focusedCellIndex`
+    const cellFocusStates: Array<boolean> = [
+      ...document.querySelectorAll("div.cell"),
+    ].map((cell) =>
+      Boolean(
+        // Checking for `.cell.focused` is not sufficient, because it is `focused` even when the cell is merely selected and not actively being edited.
+        // Checking for `.monaco-editor.focused`, on the other hand, does in fact give us what we need.
+        cell.querySelector("div.monaco-editor.focused")
+      )
+    );
+    if (!cellFocusStates.some((isFocused) => isFocused)) {
+      // No cell is active.
+      return null;
+    }
+    const focusedCellIndex = cellFocusStates.findIndex(
+      (isFocused) => isFocused
+    );
+    const focusedCellNode =
+      document.querySelectorAll("div.cell")[focusedCellIndex];
 
-  // `focusedCellIndex`
-  const cellFocusStates: Array<boolean> = [
-    ...document.querySelectorAll("div.cell"),
-  ].map((cell) =>
-    Boolean(
-      // Checking for `.cell.focused` is not sufficient, because it is `focused` even when the cell is merely selected and not actively being edited.
-      // Checking for `.monaco-editor.focused`, on the other hand, does in fact give us what we need.
-      cell.querySelector("div.monaco-editor.focused")
-    )
-  );
-  if (!cellFocusStates.some((isFocused) => isFocused)) {
-    // No cell is active.
-    return null;
-  }
-  const focusedCellIndex = cellFocusStates.findIndex((isFocused) => isFocused);
-  const focusedCellNode =
-    document.querySelectorAll("div.cell")[focusedCellIndex];
+    // Estimate the caret position by measuring the layout of the relevant elements.
+    const lineNodes = queryColabCellLines(focusedCellNode);
+    const lineTops = lineNodes.map(
+      (lineNode) => lineNode.getBoundingClientRect().top
+    );
+    const caretNode = focusedCellNode.querySelector("div.cursor");
+    if (caretNode == null) {
+      throw new Error("Expected caret to exist when cell is focused");
+    }
+    const { left: caretLeft, top: caretTop } =
+      caretNode.getBoundingClientRect();
+    const caretLineNumber = lineTops.findIndex(
+      (top) => Math.abs(top - caretTop) < 1.0 // within 1 pixel
+    );
+    const lineSpanRight = lineNodes[caretLineNumber]
+      .querySelector("span")!
+      .getBoundingClientRect().right;
 
-  // Get the `selectionStart` of the focused cell
-  const inputAreas: Array<HTMLTextAreaElement | null> = [
-    ...document.querySelectorAll("div.cell"),
-  ].map((cell) => cell.querySelector("textarea.inputarea"));
-  // I've confirmed that `selectionStart` is accurate even when the lines are out of order in the DOM tree
-  const selectionStart = inputAreas[focusedCellIndex]?.selectionStart;
-  const selectionEnd = inputAreas[focusedCellIndex]?.selectionEnd;
-  if (selectionStart == null || selectionEnd !== selectionStart) {
-    // Don't show a completion if there is no caret, or if the user is trying to select something.
-    return null;
-  }
-  // `selectionStart` seems to max out at 500, even if the line is longer.
-  // Beyond that point, we can't estimate the caret position reliably.
-  // This scenario should be very rare, so it's okay to just return null.
-  if (selectionStart >= 500) {
-    return null;
-  }
-
-  // Use the `selectionStart` to infer line info
-  const cellTextBeforeCaret = cellTexts[focusedCellIndex].slice(
-    0,
-    selectionStart
-  );
-  // https://stackoverflow.com/a/43820645
-  const lineNumberInCell = cellTextBeforeCaret.match(/\n/g)?.length ?? 0;
-  const cellTextAfterCaret = cellTexts[focusedCellIndex].slice(selectionStart);
-  const isCaretAtEndOfLine =
-    cellTextAfterCaret.length === 0 || cellTextAfterCaret[0] === "\n";
-
-  return {
-    focusedCellIndex,
-    focusedCellType: focusedCellNode.classList.contains("code")
-      ? "CODE"
-      : "TEXT",
-    currentLineInfo: {
-      lineNumber: lineNumberInCell,
-      isAtEnd: isCaretAtEndOfLine,
-    },
+    return {
+      focusedCellIndex,
+      focusedCellType: focusedCellNode.classList.contains("code")
+        ? "CODE"
+        : "TEXT",
+      currentLineInfo: {
+        lineNumber: caretLineNumber,
+        // Empirically, this heuristic works for any line length up to at least 2000 characters or so.
+        // Longer lines may result in false negatives, but that's okay, because such lines are rare
+        // and users don't expect us to always show a completion.
+        isAtEnd: Math.abs(caretLeft - lineSpanRight) < 3.0,
+      },
+    };
   };
-};
 
 export const mockableJupyterMeasurer = {
   /**
@@ -166,13 +167,12 @@ export const getCurrentCaretPositionInfoForJupyter =
  * Provides the user's most up-to-date caret position.
  */
 const useCaretPositionInfo = (
-  notebookType: NotebookType,
-  cellTexts: Array<string> | null
+  notebookType: NotebookType
 ): CaretPositionInfo | null => {
   const [caretPositionInfo, setCaretPositionInfo] =
     React.useState<CaretPositionInfo | null>(
       notebookType === NotebookType.COLAB
-        ? getCurrentCaretPositionInfoForColab(cellTexts)
+        ? getCurrentCaretPositionInfoForColab()
         : getCurrentCaretPositionInfoForJupyter()
     );
 
@@ -183,12 +183,12 @@ const useCaretPositionInfo = (
       if (mutations.length > 0) {
         const newCaretPositionInfo =
           notebookType === NotebookType.COLAB
-            ? getCurrentCaretPositionInfoForColab(cellTexts)
+            ? getCurrentCaretPositionInfoForColab()
             : getCurrentCaretPositionInfoForJupyter();
         setCaretPositionInfo(newCaretPositionInfo);
       }
     },
-    [cellTexts, notebookType, setCaretPositionInfo]
+    [notebookType, setCaretPositionInfo]
   );
   useMutationObserver(bodyRef, refreshCaretPosition);
 

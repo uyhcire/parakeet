@@ -1,6 +1,5 @@
 import fs from "fs";
 
-import { getCurrentCaretPositionInfoForColab } from "../useCaretPositionInfo";
 import { getCurrentCellTextsForColab } from "../useCellTexts";
 
 test("Parses a Colab notebook properly", () => {
@@ -18,18 +17,6 @@ test("Parses a Colab notebook properly", () => {
     // Cell 3 (focused)
     ["# Define y.", "y = 2"],
   ]);
-
-  expect(getCurrentCaretPositionInfoForColab(cellTexts)).toEqual({
-    focusedCellIndex: 2,
-    focusedCellType: "CODE",
-    // The caret looks like it is at the very beginning of the cell,
-    // because the `selectionStart` is 0 in this test. `selectionStart` is normally set by Monaco's JS code,
-    // but the Monaco JS code is not included in the HTML snapshot.
-    currentLineInfo: {
-      lineNumber: 0,
-      isAtEnd: false,
-    },
-  });
 });
 
 test("Parses a Colab notebook properly even when the lines are out of order in the DOM tree", () => {
@@ -55,7 +42,4 @@ test("Parses a Colab notebook properly even when the lines are out of order in t
       'Image("/tmp/output.jpg")',
     ],
   ]);
-
-  // In this HTML snapshot, the cell is not being edited.
-  expect(getCurrentCaretPositionInfoForColab(cellTexts)).toEqual(null);
 });

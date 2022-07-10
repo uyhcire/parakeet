@@ -1,6 +1,6 @@
 {
   "name": "parakeet",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "A sidekick to help write code in notebooks",
   "author": "Eric Yu",
   "license": "MIT",
